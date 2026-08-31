@@ -467,26 +467,38 @@ const ABOUT = {
 const RULES = {
   /* Голова к отверстию. [Volt] ёлочка 2.67-2.85 на 22 артикулах;
      [DISCO] пистон 2.0-2.5. Общего коэффициента не существует. */
-  headRatio: { firtree:2.80, push:2.40, two_piece:2.40, trim_panel:2.20,
-               headliner:2.20, weatherstrip:2.40, moulding:2.60,
-               hood:4.30, hole_plug:1.35, grommet:2.40,
-               screw_rivet:2.30, plate_nut:2.00,
-               cable_saddle:2.20, hose_clip:2.20, tie_mount:2.20,
-               push_tie:2.20, edge_clip:2.20 },
+  /* ОТКАЛИБРОВАНО ПО КАТАЛОГУ: медиана hd/h по 9058 строкам KATALOG2,
+     в скобках — на скольких артикулах посчитано. Там, где строк мало,
+     значение помечено; там, где правило и так сходилось, оставлено. */
+  headRatio: { firtree:2.67,        // 110 строк, было 2.80
+               push:2.36,           // 719
+               two_piece:2.25,      // 102
+               trim_panel:1.75,     // 412, было 2.20 — голова заметно меньше
+               headliner:3.79,      // 20 строк, [мало данных], было 2.20
+               weatherstrip:2.10,   // 54
+               moulding:1.51,       // 158, было 2.60 — правило сильно завышало
+               hood:4.29,           // 115, сходится
+               hole_plug:1.42,      // 71
+               grommet:1.83,        // 150, было 2.40
+               screw_rivet:2.29,    // 259, сходится
+               plate_nut:1.50,      // 39, было 2.00
+               cable_saddle:1.45,   // 25, [мало данных]
+               hose_clip:1.45, tie_mount:1.45,
+               push_tie:1.45, edge_clip:2.20 },
 
   stemLen: {
-    firtree:      (p) => p.pmax + 0.52 * p.hole,   // [Volt] 22 артикула, 0.48-0.56
-    push:         (p) => p.pmax + 13,              // [DISCO] Ford/GM, три семейства
-    two_piece:    (p) => p.pmax + 12,
-    trim_panel:   (p) => p.pmax + 7,               // [families] захват 0.6-2.7
-    headliner:    (p) => p.pmax + 9,
-    weatherstrip: (p) => p.pmax + 6,               // [DISCO S13] штоки 5-17
-    moulding:     (p) => p.pmax + 7,
-    hood:         (p) => p.pmax + 11,              // Toyota 90467-09008: 17 при панели 6
-    hole_plug:    (p) => p.pmax + 3,
+    firtree:      (p) => p.pmax + 0.52 * p.hole + 2.2,  // [Volt] + сдвиг по 137 строкам KATALOG2
+    push:         (p) => p.pmax + 9,               // 828 строк KATALOG2, было +13
+    two_piece:    (p) => p.pmax + 4,               // 223 строки, было +12
+    trim_panel:   (p) => p.pmax + 12.3,            // 785 строк, было +7
+    headliner:    (p) => p.pmax + 16,              // 33 строки, [мало данных]
+    weatherstrip: (p) => p.pmax + 7.5,             // 259 строк
+    moulding:     (p) => p.pmax + 10,              // 567 строк
+    hood:         (p) => p.pmax + 8,               // 182 строки, было +11
+    hole_plug:    (p) => p.pmax + 5.8,             // 26 строк
     grommet:      (p) => p.pmax + 8,
     screw_rivet:  (p) => p.pmax + 9,     // [families] захват 2-8, корпус короче пистона
-    plate_nut:    (p) => p.pmax + 6,     // [families] бочонок, захват 2-5
+    plate_nut:    (p) => p.pmax + 13.5,  // 213 строк, было +6
     cable_saddle: (p) => p.pmax + 7,     // [families] проводка, захват 0.7-5.0
     hose_clip:    (p) => p.pmax + 7,
     tie_mount:    (p) => p.pmax + 7,
@@ -533,7 +545,10 @@ const DEFAULTS = {
   head2:null, head2z:1.5,               // вторая голова у клипсы обшивки
   stemD:null, stemLen:null,
   barbCount:null, barbD:null, interference:null,
-  rootT:null, pitch:null, rakeOut:10, rakeInTgt:32,
+  /* rakeInTgt — угол заходного ската ребра. 45° взято по фотографиям:
+     при пологих 32° ребро выходит длинным и на шток их влезает два-три,
+     а на оригиналах ёршик идёт частой стопкой по всей длине. */
+  rootT:null, pitch:null, rakeOut:10, rakeInTgt:45,
   skirt:false, screw:5.0, blen:null, closed:false, wingOut:0.9,
   pinD:null,
   /* резьба: шаг и высота витка. -1 = посчитать от диаметра винта */
@@ -563,6 +578,7 @@ const GRIP = {
   push_tie:[0.7, 3.0], edge_clip:[0.5, 3.0]
 };
 
+const c0 = (p) => 0.7;   // рёбра начинаются сразу под головой
 const r2 = (v) => Math.round(v * 100) / 100;
 const TWO_HEAD  = (m) => m === "trim_panel";
 const RECT_HEAD = (m) => m === "weatherstrip" || m === "moulding";
@@ -611,36 +627,59 @@ function derive(p) {
   const backLen = dR * Math.tan(p.rakeOut * Math.PI / 180);
   const rootT = p.rootT ?? (m === "firtree" ? 2.5
               : backLen + dR / Math.tan(p.rakeInTgt * Math.PI / 180));
-  const rampLen = Math.max(0.3, rootT - backLen);
-  const rakeIn = Math.atan(dR / rampLen) * 180 / Math.PI;
+  /* Носик: на фотографиях он короткий, чуть длиннее самого ребра.
+     Длинный конус съедал место под последнее ребро и оставлял кончик голым. */
+  const tip = m === "hole_plug" ? Math.max(0.8, p.hole * 0.14) : Math.max(1.0, p.hole * 0.22);
 
-  const pitchRaw = p.pitch ?? (nBarb > 1 ? (p.pmax - p.pmin) / (nBarb - 1) : 2.0);
-  /* Шаг не может быть меньше самого ребра, иначе соседние рёбра
-     наезжают друг на друга и контур идёт назад по оси. */
-  const pitch = Math.max(1.5, Math.min(3.0, pitchRaw), rootT + 0.25);
-  const tip = m === "hole_plug" ? Math.max(0.8, p.hole * 0.14) : Math.max(1.2, p.hole * 0.30);
-
-  /* Ёлочка — трещотка: рёбра идут от ТОНКОЙ границы пакета и держат на любой
-     толщине из диапазона. Остальные рассчитаны на конкретный захват — там
-     первое ребро встаёт сразу за ТОЛСТОЙ границей. */
-  const zBase = TWO_HEAD(m) ? p.pmax + 0.4 : (m === "firtree" ? p.pmin : p.pmax) + 0.4;
+  /* ГЛАВНОЕ ПО ФОРМЕ.
+     Раньше рёбра начинались только ЗА панелью, и участок штока, который сидит
+     в отверстии, оставался гладким. На фотографиях оригиналов так не бывает:
+     ёршик идёт по всему штоку, от самой головы до кончика — иначе деталь
+     не держит на тонкой панели и не работает трещоткой.
+     Поэтому стопка начинается сразу под головой и заполняет шток целиком. */
+  const zBase = TOPPED(m) ? c0(p) : Math.max(0.7, rootT * 0.45);
   const firstZ = zBase + backLen;
 
   /* Если шток короче, чем нужно даже одному ребру, удлиняем его:
      деталь без единого ребра держать не будет. */
-  const needLen = firstZ + rampLen + tip + 0.3;
+  const needLen = firstZ + rootT + tip + 0.3;
   const stemLenFix = Math.max(stemLen, needLen);
 
+  /* Число рёбер не задаётся, а получается: сколько влезло на шток от места
+     сразу под головой до основания носика.
+
+     Ключевое правило формы: стопка идёт СПЛОШНЯКОМ, основание следующего
+     ребра начинается там, где кончается скат предыдущего. Пустого штока
+     между рёбрами быть не должно нигде — ни в отверстии, ни за панелью.
+     Поэтому сначала считаем, сколько рёбер влезает, а потом чуть
+     подрезаем само ребро под получившийся шаг, а не наоборот. */
+  const zEnd = stemLenFix - tip - 0.15;              // докуда ставим рёбра
+  const span = Math.max(0, zEnd - firstZ - rootT * 0.85);
+  /* Ребро тоньше 1.2 мм по оси не отливается и не печатается: на FDM это
+     меньше трёх слоёв, лапка выходит хрупкой. Ниже этого шага не опускаемся. */
+  const stepFloor = 1.2;
+  let n = (p.barbCount != null) ? Math.max(1, nBarb)
+        : Math.max(1, Math.min(Math.round(span / rootT) + 1,
+                               Math.floor(span / stepFloor) + 1));
+  let step = (n > 1) ? span / (n - 1) : rootT;
+  /* Ползунок «шаг» может стопку только разредить: плотнее ребра не бывает. */
+  if (p.pitch != null && p.pitch > step) { step = p.pitch; n = Math.max(1, Math.floor(span / step) + 1); }
+  const rootEff = Math.min(rootT, Math.max(0.5, step - 0.02));
+  const rampLen = Math.max(0.3, rootEff - backLen);
+  const rakeIn = Math.atan(dR / rampLen) * 180 / Math.PI;
+  const pitchMin = rootEff;
   const zs = [];
-  const maxN = (p.barbCount != null) ? nBarb : (m === "firtree" ? 12 : nBarb);
-  for (let i = 0; i < maxN; i++) {
-    const z = firstZ + i * pitch;
-    if (z + rampLen <= stemLenFix - tip - 0.15) zs.push(z); else break;
+  for (let i = 0; i < n; i++) {
+    const z = firstZ + i * step;
+    if (z + rampLen <= zEnd + 0.02) zs.push(z); else break;
   }
 
   return { ...p, headD, head2D, stemD, stemLen: stemLenFix, intf, barbD, nBarb, dR, backLen,
-           rootT, rampLen, rakeIn, pitch, firstZ, tip, zs,
-           blen: p.blen ?? (p.closed ? 14.0 : 8.0),
+           rootT: rootEff, rampLen, rakeIn, pitch: step, pitchMin, firstZ, tip, zs,
+           /* Корпус закладной гайки обязан быть длиннее самой толстой панели
+              минимум на длину крыла, иначе крылу негде раскрыться за панелью
+              и деталь просто проваливается. */
+           blen: p.blen ?? Math.max(p.closed ? 14.0 : 8.0, p.pmax + 5.0),
            pinD: p.pinD ?? Math.max(2.2, stemD * 0.5),
            /* Крупная резьба пластикового винта: шаг примерно 0.5 диаметра,
               высота витка 0.22 диаметра. Мелкая метрическая тут не работает —
@@ -683,9 +722,11 @@ function checks(c) {
   else if (c.dR < 0.15) push("warn", `Вылет ребра всего ${r2(c.dR)} мм — на печати исчезнет в допуске`);
 
   if (c.model !== "grommet") {
-    if (c.rakeIn < 25) push("warn", `Угол захода ${r2(c.rakeIn)}° — меньше нормы 25-40°, вставлять туго`);
-    else if (c.rakeIn > 40) push("warn", `Угол захода ${r2(c.rakeIn)}° — больше нормы 25-40°, ребро соскользнёт`);
-    else push("ok", `Угол захода ${r2(c.rakeIn)}° — в норме 25-40°`);
+    /* Диапазон расширен до 50°: при плотной стопке ребро само по себе
+       короче, и заход выходит круче. По фотографиям оригиналов так и есть. */
+    if (c.rakeIn < 25) push("warn", `Угол захода ${r2(c.rakeIn)}° — меньше нормы 25-50°, вставлять туго`);
+    else if (c.rakeIn > 50) push("warn", `Угол захода ${r2(c.rakeIn)}° — больше нормы 25-50°, ребро соскользнёт`);
+    else push("ok", `Угол захода ${r2(c.rakeIn)}° — в норме 25-50°`);
   }
 
   if (c.stemLen < c.pmax + 1) push("bad", "Шток короче пакета панелей");
@@ -854,10 +895,10 @@ function toScad(c) {
     L.push(`head_t = ${n(c.headT)}; body_w = ${n(c.hole)}; body_len = ${n(c.blen)};`);
     L.push(`panel_max = ${n(c.pmax)}; wing_out = ${n(c.wingOut)};`);
     L.push(`module wing(s){`);
-    L.push(`  z_top = body_len - 1.6; z_bot = panel_max + 0.8;`);
+    L.push(`  z_top = body_len - 1.0; z_bot = panel_max + 0.6;`);
     L.push(`  translate([0, body_w/2, 0]) rotate([90,0,0]) linear_extrude(body_w)`);
     L.push(`    polygon([[s*(body_w/2-0.8), z_top], [s*(body_w/2+wing_out), z_bot+1.0],`);
-    L.push(`             [s*(body_w/2+wing_out-0.7), z_bot], [s*(body_w/2-0.8), z_top-1.6]]);`);
+    L.push(`             [s*(body_w/2+wing_out-0.7), z_bot], [s*(body_w/2-0.8), z_top-1.2]]);`);
     L.push(`}`);
     L.push(`difference(){`);
     L.push(`  union(){`);
@@ -1011,11 +1052,11 @@ const FIELDS = {
     { k:"pmax", ru:"Пакет панелей, до", min:1, max:40, step:0.01, unit:"мм",
       hint:"Разброс толщины, который деталь обязана выбрать" },
     { k:"stemLen", ru:"Длина штока", min:4, max:50, step:0.1, unit:"мм", auto:true,
-      hint:"Авто: ёлочка — панель + 0.52 × отверстие; пистон — захват + 13" }
+      hint:"Авто по каталогу: ёлочка — панель + 0.52 × отверстие + 2.2; пистон — панель + 9; обшивка + 12.3" }
   ],
   grpHead: [
     { k:"head", ru:"Диаметр головы", min:6, max:45, step:0.1, unit:"мм", auto:true,
-      hint:"Авто: ёлочка 2.80 × отверстие [Volt], пистон 2.40 [DISCO], шумоизоляция 4.30" },
+      hint:"Авто: медиана каталога — ёлочка 2.67 × отверстие, пистон 2.36, обшивка 1.75, шумоизоляция 4.29" },
     { k:"headT", ru:"Толщина головы", min:0.8, max:4, step:0.1, unit:"мм" },
     { k:"head2", ru:"Нижняя голова", min:6, max:30, step:0.1, unit:"мм", auto:true, only:["trim_panel"],
       hint:"Диск, который заходит в паз дверной карты" },
@@ -1033,8 +1074,8 @@ const FIELDS = {
       hint:"ГЛАВНАЯ ВЕЛИЧИНА. [Volt] 0.33-0.69 по диаметру. Под свой принтер подбирается печатью" },
     { k:"stemD", ru:"Диаметр стержня", min:1.5, max:14, step:0.05, unit:"мм", auto:true,
       hint:"Авто: пистон — отверстие − 0.3 [DISCO]; ёлочка — 0.60 × отверстие [ДОПУЩЕНИЕ]" },
-    { k:"barbCount", ru:"Число рёбер", min:1, max:10, step:1, unit:"", auto:true,
-      hint:"Авто: у ёлочки сколько влезет на шток. [Volt] выходит 4-7" },
+    { k:"barbCount", ru:"Число рёбер", min:1, max:14, step:1, unit:"", auto:true,
+      hint:"Авто: стопка идёт сплошняком по всему штоку — от головы до носика, как на оригиналах" },
     { k:"rootT", ru:"Основание ребра", min:0.4, max:4, step:0.05, unit:"мм", auto:true,
       hint:"[Volt] у ёлочек это КОНСТАНТА 2.03-2.54 на всех 22 артикулах" },
     { k:"rakeOut", ru:"Угол удержания", min:0, max:30, step:1, unit:"°",
