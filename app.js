@@ -430,51 +430,126 @@ const save = (blob, name) => { const a = document.createElement("a");
   a.href = URL.createObjectURL(blob); a.download = name; a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000); };
 
-/* ---------------- каталог ---------------- */
+/* =====================================================================
+   Каталог — 5499 позиций из шести источников: DISCO, ARaymond,
+   Nifco, Clips and Fasteners, Buy Auto Supply, VehicleClips.
+   Часть строится генератором, часть только справочная — помечено.
+   ===================================================================== */
+const FAMRU = FAMILIES;
+const CAT = CATALOG;
+const BUILDABLE = CAT.filter(r => r.b);
+
+function catDims(r){
+  const a = [];
+  if (r.h != null) a.push("отв " + (r.hs === "square" || r.hs === "кв" ? "кв " : "Ø") + r.h);
+  if (r.hd != null) a.push("гол Ø" + r.hd);
+  else if (r.hw != null && r.hl != null) a.push("гол " + r.hw + "×" + r.hl);
+  if (r.st != null) a.push("шток " + r.st);
+  if (r.g0 != null && r.g1 != null) a.push("пакет " + r.g0 + "–" + r.g1);
+  if (r.sc != null) a.push("винт " + r.sc);
+  return a.join(" · ");
+}
+
+function fillSelect(id, list, label){
+  $(id).innerHTML = `<option value="">${label}</option>` +
+    list.map(([v, n, c]) => `<option value="${v}">${n} (${c})</option>`).join("");
+}
+
 function buildCatalog(){
-  const brands = [...new Set(PARTS.map(p => p.brand).filter(Boolean))].sort();
-  $("catBrand").innerHTML = `<option value="">все марки</option>` +
-    brands.map(b => `<option>${b}</option>`).join("");
-  const types = [...new Set(PARTS.map(p => p.model))];
-  $("catType").innerHTML = `<option value="">все типы</option>` +
-    types.map(t => `<option value="${t}">${(MODELS[t] || { ru:t }).ru}</option>`).join("");
+  $("catTotal").textContent = CAT.length.toLocaleString("ru") + " позиций · строится " +
+    BUILDABLE.length.toLocaleString("ru");
+
+  const count = (key) => {
+    const m = new Map();
+    for (const r of CAT) { const v = r[key]; if (v) m.set(v, (m.get(v) || 0) + 1); }
+    return [...m.entries()].sort((a, b) => b[1] - a[1]);
+  };
+  fillSelect("catFam", count("f").map(([v, c]) => [v, FAMRU[v] || v, c]), "все семейства");
+  fillSelect("catBrand", count("br").map(([v, c]) => [v, v, c]), "все марки");
+  fillSelect("catSrc", count("s").map(([v, c]) => [v, v, c]), "все источники");
+
+  const num = (id) => { const v = parseFloat($(id).value.replace(",", ".")); return isFinite(v) ? v : null; };
 
   const upd = () => {
-    const b = $("catBrand").value, ty = $("catType").value,
-          q = $("catSearch").value.trim().toLowerCase();
-    const rows = PARTS.filter(p => (!b || p.brand === b) && (!ty || p.model === ty) &&
-      (!q || (p.part + " " + (p.oe || "")).toLowerCase().includes(q)));
-    $("catCount").textContent = `Найдено: ${rows.length} из ${PARTS.length}`;
-    $("catBody").innerHTML = rows.slice(0, 300).map(p =>
-      `<tr class="pick" data-i="${PARTS.indexOf(p)}">
-        <td><span class="tag">${(MODELS[p.model] || { short:p.model }).short}</span></td>
-        <td class="n">${p.part}</td>
-        <td>${p.brand ? p.brand + " " + (p.oe || "") : "—"}</td>
-        <td class="n">${p.hole ?? "—"}</td>
-        <td class="n">${p.hw ? p.hw + "×" + p.hl : (p.head ?? "—")}</td>
-        <td class="n">${p.stem ?? "—"}</td><td>${p.src}</td></tr>`).join("");
-    for (const tr of $("catBody").querySelectorAll("tr"))
-      tr.onclick = () => applyPart(PARTS[+tr.dataset.i]);
+    const fam = $("catFam").value, br = $("catBrand").value, src = $("catSrc").value;
+    const q = $("catSearch").value.trim().toLowerCase();
+    const mh = num("mHole"), mhd = num("mHead"), mst = num("mStem");
+    const tol = parseFloat($("mTol").value);
+    const onlyB = $("onlyBuild").checked, onlyI = $("onlyImg").checked;
+    const measuring = mh != null || mhd != null || mst != null;
+
+    let rows = CAT.filter(r => {
+      if (fam && r.f !== fam) return false;
+      if (br && r.br !== br) return false;
+      if (src && r.s !== src) return false;
+      if (onlyB && !r.b) return false;
+      if (onlyI && !r.i) return false;
+      if (q && !((r.p + " " + (r.o || "")).toLowerCase().includes(q))) return false;
+      if (mh != null && (r.h == null || Math.abs(r.h - mh) > tol)) return false;
+      if (mhd != null) {
+        const hd = r.hd ?? (r.hw != null && r.hl != null ? Math.max(r.hw, r.hl) : null);
+        if (hd == null || Math.abs(hd - mhd) > tol) return false;
+      }
+      if (mst != null && (r.st == null || Math.abs(r.st - mst) > tol)) return false;
+      return true;
+    });
+
+    /* при поиске по замерам сортируем по близости — ближайший кандидат сверху */
+    if (measuring) {
+      const dist = (r) => {
+        let d = 0;
+        if (mh != null) d += Math.abs(r.h - mh);
+        if (mhd != null) { const hd = r.hd ?? Math.max(r.hw, r.hl); d += Math.abs(hd - mhd); }
+        if (mst != null) d += Math.abs(r.st - mst);
+        return d;
+      };
+      rows = rows.slice().sort((a, b) => dist(a) - dist(b));
+    }
+
+    $("catCount").innerHTML = `Найдено: <b style="color:var(--ink)">${rows.length.toLocaleString("ru")}</b>` +
+      ` из ${CAT.length.toLocaleString("ru")}` +
+      (measuring ? " · отсортировано по близости к замерам" : "") +
+      (rows.length > 240 ? " · показаны первые 240" : "");
+
+    $("catGrid").innerHTML = rows.slice(0, 240).map((r, i) => {
+      const idx = CAT.indexOf(r);
+      const ph = r.i
+        ? `<div class="ph"><img loading="lazy" src="${r.i}" alt=""
+             onerror="this.parentNode.innerHTML='<span>нет фото</span>'"></div>`
+        : `<div class="ph"><span>нет фото</span></div>`;
+      return `<div class="cc ${r.b ? "" : "no"}" data-i="${idx}" title="${r.b ? "нажми — параметры уйдут в генератор" : "данных для построения не хватает"}">
+        ${ph}<div class="bd">
+          <div class="pn">${r.p}</div>
+          <div class="fm">${FAMRU[r.f] || r.f}${r.b ? "" : " · только справка"}</div>
+          <div class="dm">${catDims(r) || "размеры не опубликованы"}</div>
+          <div class="oe">${r.o ? r.o.slice(0, 46) : r.s}</div>
+        </div></div>`;
+    }).join("");
+
+    for (const cc of $("catGrid").querySelectorAll(".cc:not(.no)"))
+      cc.onclick = () => applyPart(CAT[+cc.dataset.i]);
   };
-  $("catBrand").onchange = upd; $("catType").onchange = upd; $("catSearch").oninput = upd;
+
+  for (const id of ["catFam","catBrand","catSrc","mTol"]) $(id).onchange = upd;
+  for (const id of ["catSearch","mHole","mHead","mStem"]) $(id).oninput = upd;
+  for (const id of ["onlyBuild","onlyImg"]) $(id).onchange = upd;
+  $("mClear").onclick = () => { for (const id of ["mHole","mHead","mStem"]) $(id).value = ""; upd(); };
   upd();
 }
 
-function applyPart(p){
-  if (MODELS[p.model]) state.model = p.model;
+/* Подставляем то, что опубликовано; остальное досчитывается правилами семейства */
+function applyPart(r){
+  if (r.g && MODELS[r.g]) state.model = r.g;
   for (const k of ["head","head2","stemLen","stemD","interference","barbCount","rootT","pitch","blen","pinD"])
     state[k] = null;
-  if (p.hole) state.hole = p.hole;
-  if (p.pmin) state.pmin = p.pmin;
-  if (p.pmax) state.pmax = p.pmax;
-  if (p.head) state.head = p.head;
-  if (p.stem) state.stemLen = p.stem;
-  if (p.barb && p.hole) state.interference = Math.round((p.barb - p.hole) * 100) / 100;
-  if (p.root) state.rootT = p.root;
-  if (p.hw) { state.hw = p.hw; state.hl = p.hl; }
-  if (p.screw) state.screw = p.screw;
-  if (p.blen) state.blen = p.blen;
-  if (p.closed != null) state.closed = p.closed;
+  if (r.h)  state.hole = r.h;
+  if (r.g0) state.pmin = r.g0;
+  if (r.g1) state.pmax = Math.max(r.g1, (r.g0 || 0) + 0.5);
+  if (r.hd) state.head = r.hd;
+  if (r.st) state.stemLen = r.st;
+  if (r.hw && r.hl) { state.hw = Math.min(r.hw, r.hl); state.hl = Math.max(r.hw, r.hl); }
+  if (r.sc) state.screw = r.sc;
+  if (r.sd) state.stemD = r.sd;
   dlgCat.close(); buildChips(); buildControls(); render();
 }
 
