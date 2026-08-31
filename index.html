@@ -497,7 +497,11 @@ const RULES = {
   /* Натяг ПО ДИАМЕТРУ. [Volt] 0.33-0.69; семейство 7.92 ровно 0.34 на всех шести */
   interference: {
     firtree: (p) => (p.hole > 7.6 && p.hole < 8.2) ? 0.34 : 0.55,
-    push: () => 0.40, two_piece: () => 0.35, trim_panel: () => 0.45,
+    /* У пистона это не «натяг», а вылет крыла: оно заведомо шире отверстия
+       и складывается при установке. [ДОПУЩЕНИЕ по изображениям каталога] */
+    push: (p) => Math.max(1.6, p.hole * 0.28),
+    two_piece: (p) => Math.max(1.4, p.hole * 0.24),
+    trim_panel: () => 0.45,
     headliner: () => 0.45, weatherstrip: () => 0.45, moulding: () => 0.45,
     hood: () => 0.45, hole_plug: () => 0.30, grommet: () => 0.45,
     screw_rivet: () => 0.50, plate_nut: () => 0.50,
@@ -506,8 +510,11 @@ const RULES = {
   },
 
   stemD: {
-    push:      (p) => p.hole - 0.3,    // [DISCO] работают только рёбра
-    two_piece: (p) => p.hole - 0.4,
+    /* Раньше стержень пистона был почти во всё отверстие, и крылья выступали
+       на 0.2 мм — на фотографиях каталога Nifco и DISCO видно, что это не так:
+       крылья крупные и гибкие, стержень тонкий. [ДОПУЩЕНИЕ по изображениям] */
+    push:      (p) => p.hole * 0.55,
+    two_piece: (p) => p.hole * 0.58,
     firtree:   (p) => p.hole * 0.60,   // [ДОПУЩЕНИЕ]
     hole_plug: (p) => p.hole - 0.5,
     _default:  (p) => p.hole * 0.62
@@ -542,6 +549,18 @@ const DEFAULTS = {
   strapW:4.8, strapT:1.2, strapLen:150, toothPitch:1.2, toothD:0.35,
   /* кромочный зажим */
   jawD:11.0, edgeT:null   // глубина захвата кромки и толщина кромки
+};
+
+/* Если каталог не публикует диапазон пакета, брать значения ёлочки нельзя:
+   у неё он огромный, и у остальных семейств шток выйдет вдвое длиннее нужного.
+   Значения ниже — из families.csv, колонка GRIP_RANGE. */
+const GRIP = {
+  firtree:[1.6, 12.7], push:[2.0, 6.0], two_piece:[1.5, 6.4],
+  trim_panel:[0.6, 2.7], headliner:[1.0, 4.0], weatherstrip:[0.8, 2.5],
+  moulding:[2.0, 4.0], hood:[4.0, 6.0], hole_plug:[1.0, 2.5],
+  grommet:[0.6, 4.5], screw_rivet:[2.0, 6.0], plate_nut:[2.0, 4.0],
+  cable_saddle:[0.7, 3.0], hose_clip:[0.7, 3.0], tie_mount:[0.7, 3.0],
+  push_tie:[0.7, 3.0], edge_clip:[0.5, 3.0]
 };
 
 const r2 = (v) => Math.round(v * 100) / 100;
@@ -1621,12 +1640,16 @@ const BUILDABLE = CAT.filter(r => r.b);
 function stateFromRow(r){
   const s = { ...DEFAULTS };
   if (r.g && MODELS[r.g]) s.model = r.g;
+  /* каталог часто не публикует диапазон пакета — берём типовой для семейства */
+  const g = GRIP[s.model] || [1.5, 5.0];
+  s.pmin = g[0]; s.pmax = g[1];
   if (r.h)  s.hole = r.h;
   if (r.g0) s.pmin = r.g0;
   if (r.g1) s.pmax = Math.max(r.g1, (r.g0 || 0) + 0.5);
   if (r.p0) { s.pmin = r.p0; s.pmax = Math.max(r.p1 || r.p0, r.p0 + 0.3); }
   if (r.hd) s.head = r.hd;
-  if (r.st) s.stemLen = r.st;
+  /* у закладной гайки опубликованная длина — это КОРПУС, а не шток */
+  if (r.st) { if (s.model === "grommet") s.blen = r.st; else s.stemLen = r.st; }
   if (r.hw && r.hl) { s.hw = Math.min(r.hw, r.hl); s.hl = Math.max(r.hw, r.hl); }
   if (r.sc) s.screw = r.sc;
   if (r.sd) s.stemD = r.sd;
@@ -1784,11 +1807,13 @@ function applyPart(r){
   if (r.g && MODELS[r.g]) state.model = r.g;
   for (const k of ["head","head2","stemLen","stemD","interference","barbCount","rootT","pitch","blen","pinD","thrPitch","thrDepth"])
     state[k] = null;
+  const gr = GRIP[state.model] || [1.5, 5.0];
+  state.pmin = gr[0]; state.pmax = gr[1];
   if (r.h)  state.hole = r.h;
   if (r.g0) state.pmin = r.g0;
   if (r.g1) state.pmax = Math.max(r.g1, (r.g0 || 0) + 0.5);
   if (r.hd) state.head = r.hd;
-  if (r.st) state.stemLen = r.st;
+  if (r.st) { if (state.model === "grommet") state.blen = r.st; else state.stemLen = r.st; }
   if (r.hw && r.hl) { state.hw = Math.min(r.hw, r.hl); state.hl = Math.max(r.hw, r.hl); }
   if (r.sc) { state.screw = r.sc; state.thrPitch = null; state.thrDepth = null; }
   if (r.sd) state.stemD = r.sd;

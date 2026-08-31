@@ -81,7 +81,11 @@ const RULES = {
   /* Натяг ПО ДИАМЕТРУ. [Volt] 0.33-0.69; семейство 7.92 ровно 0.34 на всех шести */
   interference: {
     firtree: (p) => (p.hole > 7.6 && p.hole < 8.2) ? 0.34 : 0.55,
-    push: () => 0.40, two_piece: () => 0.35, trim_panel: () => 0.45,
+    /* У пистона это не «натяг», а вылет крыла: оно заведомо шире отверстия
+       и складывается при установке. [ДОПУЩЕНИЕ по изображениям каталога] */
+    push: (p) => Math.max(1.6, p.hole * 0.28),
+    two_piece: (p) => Math.max(1.4, p.hole * 0.24),
+    trim_panel: () => 0.45,
     headliner: () => 0.45, weatherstrip: () => 0.45, moulding: () => 0.45,
     hood: () => 0.45, hole_plug: () => 0.30, grommet: () => 0.45,
     screw_rivet: () => 0.50, plate_nut: () => 0.50,
@@ -90,8 +94,11 @@ const RULES = {
   },
 
   stemD: {
-    push:      (p) => p.hole - 0.3,    // [DISCO] работают только рёбра
-    two_piece: (p) => p.hole - 0.4,
+    /* Раньше стержень пистона был почти во всё отверстие, и крылья выступали
+       на 0.2 мм — на фотографиях каталога Nifco и DISCO видно, что это не так:
+       крылья крупные и гибкие, стержень тонкий. [ДОПУЩЕНИЕ по изображениям] */
+    push:      (p) => p.hole * 0.55,
+    two_piece: (p) => p.hole * 0.58,
     firtree:   (p) => p.hole * 0.60,   // [ДОПУЩЕНИЕ]
     hole_plug: (p) => p.hole - 0.5,
     _default:  (p) => p.hole * 0.62
@@ -126,6 +133,18 @@ const DEFAULTS = {
   strapW:4.8, strapT:1.2, strapLen:150, toothPitch:1.2, toothD:0.35,
   /* кромочный зажим */
   jawD:11.0, edgeT:null   // глубина захвата кромки и толщина кромки
+};
+
+/* Если каталог не публикует диапазон пакета, брать значения ёлочки нельзя:
+   у неё он огромный, и у остальных семейств шток выйдет вдвое длиннее нужного.
+   Значения ниже — из families.csv, колонка GRIP_RANGE. */
+const GRIP = {
+  firtree:[1.6, 12.7], push:[2.0, 6.0], two_piece:[1.5, 6.4],
+  trim_panel:[0.6, 2.7], headliner:[1.0, 4.0], weatherstrip:[0.8, 2.5],
+  moulding:[2.0, 4.0], hood:[4.0, 6.0], hole_plug:[1.0, 2.5],
+  grommet:[0.6, 4.5], screw_rivet:[2.0, 6.0], plate_nut:[2.0, 4.0],
+  cable_saddle:[0.7, 3.0], hose_clip:[0.7, 3.0], tie_mount:[0.7, 3.0],
+  push_tie:[0.7, 3.0], edge_clip:[0.5, 3.0]
 };
 
 const r2 = (v) => Math.round(v * 100) / 100;
@@ -559,7 +578,7 @@ function toScad(c) {
 /*__NODE__*/
 if (typeof module !== "undefined")
   module.exports = { MODELS, ABOUT, RULES, DEFAULTS, derive, checks, toScad, r2,
-                     buildProfile, stemProfile, buildPinProfile, buildSleeveProfile, boredProfile,
+                     GRIP, buildProfile, stemProfile, buildPinProfile, buildSleeveProfile, boredProfile,
                      screwCoreProfile, cSeatPoly, edgePoly, strapPoly,
                      TWO_HEAD, RECT_HEAD, THREADED, SADDLE, PLATE, TOPPED, PUSH_TIE, EDGE };
 /*__ENDNODE__*/

@@ -644,12 +644,16 @@ const BUILDABLE = CAT.filter(r => r.b);
 function stateFromRow(r){
   const s = { ...DEFAULTS };
   if (r.g && MODELS[r.g]) s.model = r.g;
+  /* каталог часто не публикует диапазон пакета — берём типовой для семейства */
+  const g = GRIP[s.model] || [1.5, 5.0];
+  s.pmin = g[0]; s.pmax = g[1];
   if (r.h)  s.hole = r.h;
   if (r.g0) s.pmin = r.g0;
   if (r.g1) s.pmax = Math.max(r.g1, (r.g0 || 0) + 0.5);
   if (r.p0) { s.pmin = r.p0; s.pmax = Math.max(r.p1 || r.p0, r.p0 + 0.3); }
   if (r.hd) s.head = r.hd;
-  if (r.st) s.stemLen = r.st;
+  /* у закладной гайки опубликованная длина — это КОРПУС, а не шток */
+  if (r.st) { if (s.model === "grommet") s.blen = r.st; else s.stemLen = r.st; }
   if (r.hw && r.hl) { s.hw = Math.min(r.hw, r.hl); s.hl = Math.max(r.hw, r.hl); }
   if (r.sc) s.screw = r.sc;
   if (r.sd) s.stemD = r.sd;
@@ -807,11 +811,13 @@ function applyPart(r){
   if (r.g && MODELS[r.g]) state.model = r.g;
   for (const k of ["head","head2","stemLen","stemD","interference","barbCount","rootT","pitch","blen","pinD","thrPitch","thrDepth"])
     state[k] = null;
+  const gr = GRIP[state.model] || [1.5, 5.0];
+  state.pmin = gr[0]; state.pmax = gr[1];
   if (r.h)  state.hole = r.h;
   if (r.g0) state.pmin = r.g0;
   if (r.g1) state.pmax = Math.max(r.g1, (r.g0 || 0) + 0.5);
   if (r.hd) state.head = r.hd;
-  if (r.st) state.stemLen = r.st;
+  if (r.st) { if (state.model === "grommet") state.blen = r.st; else state.stemLen = r.st; }
   if (r.hw && r.hl) { state.hw = Math.min(r.hw, r.hl); state.hl = Math.max(r.hw, r.hl); }
   if (r.sc) { state.screw = r.sc; state.thrPitch = null; state.thrDepth = null; }
   if (r.sd) state.stemD = r.sd;
