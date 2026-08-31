@@ -19,7 +19,10 @@ const MODELS = {
   hole_plug:    { ru:"Заглушка отверстия",     short:"Заглушка",    head:"round" },
   grommet:      { ru:"Закладная гайка",        short:"Гайка",       head:"round" },
   screw_rivet:  { ru:"Винтовой распорный",     short:"Винтовой",    head:"round" },
-  plate_nut:    { ru:"Гайка под номер",        short:"Гайка ном.",  head:"round" }
+  plate_nut:    { ru:"Гайка под номер",        short:"Гайка ном.",  head:"round" },
+  cable_saddle: { ru:"Держатель проводки",     short:"Проводка",    head:"saddle" },
+  hose_clip:    { ru:"Клипса шлангов и трубок",short:"Шланги",      head:"saddle" },
+  tie_mount:    { ru:"Площадка под стяжку",    short:"Стяжка",      head:"plate" }
 };
 
 /* Что делает каждое семейство и где стоит — показывается в подсказке */
@@ -35,7 +38,10 @@ const ABOUT = {
   hole_plug:    "Несущей функции нет, просто закрывает технологическое отверстие кузова.",
   grommet:      "Нейлоновый корпус в КВАДРАТНОЕ отверстие, саморез нарезает резьбу внутри. Вся японская защита картера.",
   screw_rivet:  "Втулка в отверстие плюс пластиковый винт с крупной резьбой: вкручивание распирает лепестки. Снимается отвёрткой, ставится обратно. Защита Toyota и Mazda, подкрылки, кожух двигателя.",
-  plate_nut:    "Нейлоновый бочонок в отверстие, саморез нарезает резьбу внутри. Номерной знак, эмблемы. Размер по винту M3.5 / 4.2 / 4.8 / 6.3."
+  plate_nut:    "Нейлоновый бочонок в отверстие, саморез нарезает резьбу внутри. Номерной знак, эмблемы. Размер по винту M3.5 / 4.2 / 4.8 / 6.3.",
+  cable_saddle: "Ложемент-защёлка на ёлочном штоке. Жгут заводится сверху и защёлкивается. В каталоге размер даётся как I.D. — внутренний диаметр под жгут. Моторный отсек, салон, двери.",
+  hose_clip:    "Одно или несколько гнёзд под трубку на общем штоке. Топливные, тормозные и омывающие магистрали. Размер по НАРУЖНОМУ диаметру трубки.",
+  tie_mount:    "Плоская площадка с прорезью под пластиковую стяжку, снизу ёлочный шток. Самое универсальное решение: диаметр жгута задаёт стяжка, а не деталь."
 };
 
 const RULES = {
@@ -44,7 +50,8 @@ const RULES = {
   headRatio: { firtree:2.80, push:2.40, two_piece:2.40, trim_panel:2.20,
                headliner:2.20, weatherstrip:2.40, moulding:2.60,
                hood:4.30, hole_plug:1.35, grommet:2.40,
-               screw_rivet:2.30, plate_nut:2.00 },
+               screw_rivet:2.30, plate_nut:2.00,
+               cable_saddle:2.20, hose_clip:2.20, tie_mount:2.20 },
 
   stemLen: {
     firtree:      (p) => p.pmax + 0.52 * p.hole,   // [Volt] 22 артикула, 0.48-0.56
@@ -58,7 +65,10 @@ const RULES = {
     hole_plug:    (p) => p.pmax + 3,
     grommet:      (p) => p.pmax + 8,
     screw_rivet:  (p) => p.pmax + 9,     // [families] захват 2-8, корпус короче пистона
-    plate_nut:    (p) => p.pmax + 6      // [families] бочонок, захват 2-5
+    plate_nut:    (p) => p.pmax + 6,     // [families] бочонок, захват 2-5
+    cable_saddle: (p) => p.pmax + 7,     // [families] проводка, захват 0.7-5.0
+    hose_clip:    (p) => p.pmax + 7,
+    tie_mount:    (p) => p.pmax + 7
   },
 
   /* Натяг ПО ДИАМЕТРУ. [Volt] 0.33-0.69; семейство 7.92 ровно 0.34 на всех шести */
@@ -67,7 +77,8 @@ const RULES = {
     push: () => 0.40, two_piece: () => 0.35, trim_panel: () => 0.45,
     headliner: () => 0.45, weatherstrip: () => 0.45, moulding: () => 0.45,
     hood: () => 0.45, hole_plug: () => 0.30, grommet: () => 0.45,
-    screw_rivet: () => 0.50, plate_nut: () => 0.50
+    screw_rivet: () => 0.50, plate_nut: () => 0.50,
+    cable_saddle: () => 0.45, hose_clip: () => 0.45, tie_mount: () => 0.45
   },
 
   stemD: {
@@ -80,7 +91,8 @@ const RULES = {
 
   barbCount: { firtree:5, push:2, two_piece:2, trim_panel:2, headliner:3,
                weatherstrip:3, moulding:3, hood:4, hole_plug:2, grommet:3,
-               screw_rivet:2, plate_nut:2 }
+               screw_rivet:2, plate_nut:2,
+               cable_saddle:3, hose_clip:3, tie_mount:3 }
 };
 
 const DEFAULTS = {
@@ -93,7 +105,14 @@ const DEFAULTS = {
   skirt:false, screw:5.0, blen:null, closed:false, wingOut:0.9,
   pinD:null,
   /* резьба: шаг и высота витка. -1 = посчитать от диаметра винта */
-  thrPitch:null, thrDepth:null, showScrew:true
+  thrPitch:null, thrDepth:null, showScrew:true,
+  /* ложементы и площадки */
+  bundleD:12.0,   // внутренний диаметр под жгут или трубку
+  wall:1.6,       // толщина стенки хомута
+  gapDeg:52,      // раскрытие защёлки, градусов на сторону от верха
+  clipW:null,     // ширина хомута вдоль оси жгута
+  seats:2,        // число гнёзд у шланговой клипсы
+  tieW:5.0, tieT:1.6   // прорезь под стяжку: ширина и толщина
 };
 
 const r2 = (v) => Math.round(v * 100) / 100;
@@ -101,6 +120,32 @@ const TWO_HEAD  = (m) => m === "trim_panel";
 const RECT_HEAD = (m) => m === "weatherstrip" || m === "moulding";
 /* Семейства, у которых есть винт с настоящей резьбой */
 const THREADED  = (m) => m === "screw_rivet" || m === "plate_nut";
+/* Семейства с ложементом или площадкой сверху вместо круглой головы */
+const SADDLE    = (m) => m === "cable_saddle" || m === "hose_clip";
+const PLATE     = (m) => m === "tie_mount";
+const TOPPED    = (m) => SADDLE(m) || PLATE(m);
+
+/* Сечение хомута-защёлки: наружная дуга по низу, внутренняя обратно,
+   сверху разрыв под заводку жгута плюс загнутые губки. */
+function cSeatPoly(d, wall, gapDeg, steps = 26) {
+  const ri = d / 2, ro = ri + wall;
+  const a0 = 90 + gapDeg, a1 = 450 - gapDeg;      // обход через низ
+  const P = [];
+  const rad = (a) => a * Math.PI / 180;
+  for (let i = 0; i <= steps; i++) {
+    const a = rad(a0 + (a1 - a0) * i / steps);
+    P.push([ro * Math.cos(a), ro * Math.sin(a)]);
+  }
+  /* губка: слегка подворачиваем внутрь, чтобы жгут не выскакивал */
+  const aEnd = rad(a1), aBeg = rad(a0);
+  P.push([(ri + wall * 0.35) * Math.cos(aEnd - rad(7)), (ri + wall * 0.35) * Math.sin(aEnd - rad(7))]);
+  for (let i = steps; i >= 0; i--) {
+    const a = rad(a0 + (a1 - a0) * i / steps);
+    P.push([ri * Math.cos(a), ri * Math.sin(a)]);
+  }
+  P.push([(ri + wall * 0.35) * Math.cos(aBeg + rad(7)), (ri + wall * 0.35) * Math.sin(aBeg + rad(7))]);
+  return P;
+}
 
 function derive(p) {
   const m = p.model;
@@ -154,7 +199,13 @@ function derive(p) {
            thrDepth: p.thrDepth ?? Math.max(0.45, p.screw * 0.22),
            screwCore: Math.max(1.6, p.screw * 0.62),
            screwLen: Math.min(stemLenFix * 0.95, p.pmax + 9),
-           boreD: Math.max(1.4, p.screw * 0.66) };
+           boreD: Math.max(1.4, p.screw * 0.66),
+           clipW: p.clipW ?? Math.max(5, Math.min(14, p.bundleD * 0.75)),
+           baseT: Math.max(1.6, p.wall),
+           baseW: (m === "hose_clip")
+                  ? (p.bundleD + 2 * p.wall + 1.2) * p.seats + 2
+                  : p.bundleD + 2 * p.wall + 3,
+           baseL: (p.clipW ?? Math.max(5, Math.min(14, p.bundleD * 0.75))) + 2.5 };
 }
 
 function checks(c) {
@@ -344,6 +395,39 @@ function toScad(c) {
       L.push(`    translate([dx*${n(c.hl/2 - r - 1.2)}, 0, 0]) cylinder(h=1.15, r=${n(r)});`);
     }
     L.push(`}`);
+  } else if (TOPPED(c.model)) {
+    const zTop = -c.baseT;                       // низ площадки
+    L.push(`// ШТОК`);
+    L.push(`rotate_extrude() polygon([`);
+    L.push(stemProfile(c).map(([r, z]) => `  [${n(r)}, ${n(z)}]`).join(",\n"));
+    L.push(`]);`);
+    L.push(``, `// ПЛОЩАДКА`);
+    if (PLATE(c.model)) {
+      /* плита с прорезью под стяжку: собрана из четырёх брусков,
+         вычитания нет — так надёжнее и печатается без артефактов */
+      const W = c.baseW, Lg = c.baseL, T = c.baseT;
+      const sw = c.tieW, st = c.tieT;
+      L.push(`difference(){`);
+      L.push(`  translate([${n(-W/2)}, ${n(-Lg/2)}, ${n(zTop)}]) cube([${n(W)}, ${n(Lg)}, ${n(T + 0.3)}]);`);
+      L.push(`  // прорезь под стяжку ${n(sw)} x ${n(st)}`);
+      L.push(`  translate([${n(-sw/2)}, ${n(-Lg)}, ${n(zTop + (T - st) / 2)}])`);
+      L.push(`    cube([${n(sw)}, ${n(Lg * 2)}, ${n(st)}]);`);
+      L.push(`}`);
+    } else {
+      const seats = (c.model === "hose_clip") ? c.seats : 1;
+      const step = c.bundleD + 2 * c.wall + 1.2;
+      const x0 = -(step * (seats - 1)) / 2;
+      L.push(`translate([${n(-c.baseW/2)}, ${n(-c.baseL/2)}, ${n(zTop)}])`);
+      L.push(`  cube([${n(c.baseW)}, ${n(c.baseL)}, ${n(c.baseT + 0.3)}]);`);
+      L.push(``, `// ХОМУТ${seats > 1 ? "Ы (" + seats + " гнезда)" : ""}: внутренний Ø${n(c.bundleD)}, стенка ${n(c.wall)}`);
+      L.push(`seat = [`);
+      L.push(cSeatPoly(c.bundleD, c.wall, c.gapDeg)
+             .map(([x, z]) => `  [${n(x)}, ${n(-z)}]`).join(",\n"));
+      L.push(`];`);
+      L.push(`for (dx = [${Array.from({length:seats}, (_, i) => n(x0 + i * step)).join(", ")}])`);
+      L.push(`  translate([dx, ${n(c.baseL/2)}, ${n(-c.baseT + 1.0 - (c.bundleD/2 + c.wall))}])`);
+      L.push(`    rotate([90,0,0]) linear_extrude(${n(c.baseL)}) polygon(seat);`);
+    }
   } else if (THREADED(c.model)) {
     L.push(`// КОРПУС с каналом под винт (контур уже кольцевой, дырка не вычитается)`);
     L.push(`rotate_extrude() polygon([`);
@@ -382,5 +466,5 @@ function toScad(c) {
 if (typeof module !== "undefined")
   module.exports = { MODELS, ABOUT, RULES, DEFAULTS, derive, checks, toScad, r2,
                      buildProfile, stemProfile, buildPinProfile, buildSleeveProfile, boredProfile,
-                     screwCoreProfile, TWO_HEAD, RECT_HEAD, THREADED };
+                     screwCoreProfile, cSeatPoly, TWO_HEAD, RECT_HEAD, THREADED, SADDLE, PLATE, TOPPED };
 /*__ENDNODE__*/

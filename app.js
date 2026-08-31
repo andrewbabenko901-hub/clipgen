@@ -51,7 +51,21 @@ const FIELDS = {
       hint:"Авто: 0.5 × диаметр винта. Крупная — мелкую метрическую нейлон срывает [ДОПУЩЕНИЕ]" },
     { k:"thrDepth", ru:"Высота витка", min:0.2, max:2.5, step:0.05, unit:"мм", auto:true,
       only:["screw_rivet","plate_nut"],
-      hint:"Авто: 0.22 × диаметр винта" }
+      hint:"Авто: 0.22 × диаметр винта" },
+    { k:"bundleD", ru:"Диаметр жгута / трубки", min:3, max:40, step:0.1, unit:"мм",
+      only:["cable_saddle","hose_clip","tie_mount"],
+      hint:"В каталоге это I.D. — внутренний размер хомута. Наружный получится больше на две стенки" },
+    { k:"wall", ru:"Толщина стенки", min:0.8, max:4, step:0.1, unit:"мм",
+      only:["cable_saddle","hose_clip","tie_mount"] },
+    { k:"gapDeg", ru:"Раскрытие защёлки", min:20, max:80, step:1, unit:"°",
+      only:["cable_saddle","hose_clip"],
+      hint:"Больше — легче завести жгут, но хуже держит" },
+    { k:"clipW", ru:"Ширина хомута", min:3, max:25, step:0.5, unit:"мм", auto:true,
+      only:["cable_saddle","hose_clip"] },
+    { k:"seats", ru:"Число гнёзд", min:1, max:4, step:1, unit:"", only:["hose_clip"] },
+    { k:"tieW", ru:"Ширина прорези", min:2.5, max:12, step:0.1, unit:"мм", only:["tie_mount"],
+      hint:"Под стандартную стяжку 4.8 мм берут 5.0-5.2" },
+    { k:"tieT", ru:"Толщина прорези", min:0.8, max:4, step:0.1, unit:"мм", only:["tie_mount"] }
   ]
 };
 
@@ -123,7 +137,7 @@ function render(){
   $("famName").textContent = MODELS[c.model].ru;
   $("about").textContent = ABOUT[c.model];
 
-  drawSide(c); drawTop(c); drawStats(c); drawChecks(c); updateMesh(c);
+  drawSide(c); drawBack(c); drawTop(c); drawStats(c); drawChecks(c); updateMesh(c);
   $("scadOut").value = toScad(c);
 }
 
@@ -135,9 +149,12 @@ const el = (t, a) => { const e = document.createElementNS(NS, t);
 function drawSide(c){
   const svg = $("svgSide"); svg.innerHTML = "";
   const W = 300, H = 330, pad = 24;
-  const P = buildProfile(c);
-  const zLo = Math.min(...P.map(p => p[1])) - 1.5, zHi = c.stemLen + 1.5;
-  const halfW = Math.max(c.headD / 2, c.hole / 2 + 8,
+  const top = TOPPED(c.model);
+  const P = top ? stemProfile(c) : buildProfile(c);
+  const zBottom = top ? -c.baseT - (SADDLE(c.model) ? c.bundleD + 2 * c.wall : 0)
+                      : Math.min(...P.map(p => p[1]));
+  const zLo = zBottom - 1.5, zHi = c.stemLen + 1.5;
+  const halfW = Math.max(top ? c.baseW / 2 : c.headD / 2, c.hole / 2 + 8,
                 RECT_HEAD(c.model) ? c.hl / 2 : 0) + 2.5;
   const s = Math.min((H - pad * 2) / (zHi - zLo), (W - pad * 2) / (halfW * 2));
   const X = (x) => W / 2 + x * s, Y = (z) => H - pad - (z - zLo) * s;
@@ -149,10 +166,34 @@ function drawSide(c){
       width:Math.abs(x1 - x0), height:c.pmax * s, fill:"#22303a", stroke:"#33454f" }));
   }
 
+  const st = { fill:"#2fd3c4", "fill-opacity":.82, stroke:"#8ff2e8",
+               "stroke-width":.9, "stroke-linejoin":"round" };
   const pts = P.map(([r, z]) => X(r) + "," + Y(z)).join(" ") + " " +
               P.slice().reverse().map(([r, z]) => X(-r) + "," + Y(z)).join(" ");
-  svg.appendChild(el("polygon", { points:pts, fill:"#2fd3c4", "fill-opacity":.82,
-    stroke:"#8ff2e8", "stroke-width":.9, "stroke-linejoin":"round" }));
+  svg.appendChild(el("polygon", { ...st, points:pts }));
+
+  /* площадка и хомуты рисуются отдельно: они не тела вращения */
+  if (top) {
+    svg.appendChild(el("rect", { ...st, x:X(-c.baseW/2), y:Y(0),
+      width:c.baseW * s, height:c.baseT * s }));
+    if (SADDLE(c.model)) {
+      const seats = c.model === "hose_clip" ? c.seats : 1;
+      const step = c.bundleD + 2 * c.wall + 1.2, x0 = -(step * (seats - 1)) / 2;
+      const ro = c.bundleD / 2 + c.wall, zc = -c.baseT + 1.0 - ro;
+      for (let i = 0; i < seats; i++) {
+        const dx = x0 + i * step;
+        svg.appendChild(el("circle", { cx:X(dx), cy:Y(zc), r:ro * s,
+          fill:"none", stroke:"#f0a34a", "stroke-width":c.wall * s, "stroke-opacity":.95,
+          "stroke-dasharray":`${2 * Math.PI * ro * s * (1 - c.gapDeg / 180)} ${2 * Math.PI * ro * s}`,
+          transform:`rotate(${-90 + c.gapDeg} ${X(dx)} ${Y(zc)})` }));
+        svg.appendChild(el("circle", { cx:X(dx), cy:Y(zc), r:c.bundleD / 2 * s,
+          fill:"none", stroke:"#5d7280", "stroke-width":.7, "stroke-dasharray":"3 3" }));
+      }
+    } else {
+      svg.appendChild(el("rect", { x:X(-c.tieW/2), y:Y(-c.baseT + (c.baseT + c.tieT) / 2),
+        width:c.tieW * s, height:c.tieT * s, fill:"#0a1114", stroke:"#33454f" }));
+    }
+  }
 
   for (const z of c.zs) for (const sg of [-1, 1])
     svg.appendChild(el("polygon", { fill:"#f0a34a", "fill-opacity":.92, stroke:"#ffd9ae",
@@ -170,13 +211,70 @@ function drawSide(c){
   svg.appendChild(t);
 }
 
+/* Вид сзади: та же деталь, но по другой оси. Для тел вращения он совпадает
+   с видом сбоку — это нормально для чертежа. Для прямоугольных голов,
+   ложементов и площадок он показывает вторую габаритную размерность. */
+function drawBack(c){
+  const svg = $("svgBack"); if (!svg) return;
+  svg.innerHTML = "";
+  const W = 300, H = 330, pad = 24;
+  const P = buildProfile(c);
+  const zLo = Math.min(...P.map(p => p[1]), TOPPED(c.model) ? -c.baseT - c.bundleD - 2 * c.wall : 0) - 1.5;
+  const zHi = c.stemLen + 1.5;
+  const halfW = (RECT_HEAD(c.model) ? c.hw / 2 : TOPPED(c.model) ? c.baseL / 2 : c.headD / 2) + 2.5;
+  const s = Math.min((H - pad * 2) / (zHi - zLo), (W - pad * 2) / (Math.max(halfW, c.hole) * 2));
+  const X = (x) => W / 2 + x * s, Y = (z) => H - pad - (z - zLo) * s;
+
+  for (const sg of [-1, 1]) {
+    const x0 = sg > 0 ? X(c.hole / 2) : X(-halfW - 5);
+    const x1 = sg > 0 ? X(halfW + 5) : X(-c.hole / 2);
+    svg.appendChild(el("rect", { x:Math.min(x0, x1), y:Y(c.pmax),
+      width:Math.abs(x1 - x0), height:c.pmax * s, fill:"#22303a", stroke:"#33454f" }));
+  }
+  const g = { fill:"#2fd3c4", "fill-opacity":.82, stroke:"#8ff2e8", "stroke-width":.9 };
+  /* шток */
+  svg.appendChild(el("polygon", { ...g, points:
+    [[-c.stemD/2, 0], [c.stemD/2, 0], [c.stemD/2, c.stemLen - c.tip], [0, c.stemLen],
+     [-c.stemD/2, c.stemLen - c.tip]].map(([x, z]) => X(x) + "," + Y(z)).join(" ") }));
+  for (const z of c.zs) for (const sg of [-1, 1])
+    svg.appendChild(el("polygon", { fill:"#f0a34a", "fill-opacity":.9, stroke:"#ffd9ae",
+      "stroke-width":.7, points:[[sg*c.stemD/2*0.99, z + c.rampLen], [sg*c.barbD/2, z],
+        [sg*c.stemD/2*0.99, z - c.backLen]].map(([x, zz]) => X(x) + "," + Y(zz)).join(" ") }));
+  /* голова или площадка */
+  if (TOPPED(c.model)) {
+    svg.appendChild(el("rect", { ...g, x:X(-c.baseL/2), y:Y(0), width:c.baseL * s, height:c.baseT * s }));
+    if (SADDLE(c.model)) {
+      const ro = c.bundleD / 2 + c.wall;
+      svg.appendChild(el("rect", { ...g, x:X(-c.clipW/2), y:Y(-c.baseT + 1.0 - 2 * ro),
+        width:c.clipW * s, height:(2 * ro - 1) * s, rx:2 }));
+    }
+  } else {
+    const hw = RECT_HEAD(c.model) ? c.hw / 2 : c.headD / 2;
+    svg.appendChild(el("rect", { ...g, x:X(-hw), y:Y(0), width:hw * 2 * s, height:c.headT * s, rx:1.5 }));
+  }
+}
+
 function drawTop(c){
   const svg = $("svgTop"); svg.innerHTML = "";
   const W = 300, H = 330, cx = W / 2, cy = H / 2 - 6;
-  const R = RECT_HEAD(c.model) ? Math.max(c.hl, c.hw) / 2 : c.headD / 2;
-  const s = Math.min((W - 46) / (R * 2), (H - 60) / (R * 2));
+  const R = TOPPED(c.model) ? Math.max(c.baseW, c.baseL) / 2
+          : RECT_HEAD(c.model) ? Math.max(c.hl, c.hw) / 2 : c.headD / 2;
+  const s = Math.min((W - 46) / (R * 2), (H - 60) / (R * 2)), s0 = s;
 
-  if (RECT_HEAD(c.model))
+  if (TOPPED(c.model)) {
+    svg.appendChild(el("rect", { x:cx - c.baseW/2*s0, y:cy - c.baseL/2*s0,
+      width:c.baseW*s0, height:c.baseL*s0, rx:1.5, fill:"#2fd3c4", "fill-opacity":.8, stroke:"#8ff2e8" }));
+    if (SADDLE(c.model)) {
+      const seats = c.model === "hose_clip" ? c.seats : 1;
+      const step = c.bundleD + 2*c.wall + 1.2, x0 = -(step*(seats-1))/2;
+      for (let i = 0; i < seats; i++)
+        svg.appendChild(el("circle", { cx:cx + (x0 + i*step)*s0, cy,
+          r:c.bundleD/2*s0, fill:"#0a1114", stroke:"#f0a34a", "stroke-width":c.wall*s0 }));
+    } else {
+      svg.appendChild(el("rect", { x:cx - c.tieW/2*s0, y:cy - c.baseL/2*s0,
+        width:c.tieW*s0, height:c.baseL*s0, fill:"#0a1114", stroke:"#33454f" }));
+    }
+  } else if (RECT_HEAD(c.model))
     svg.appendChild(el("rect", { x:cx - c.hl / 2 * s, y:cy - c.hw / 2 * s,
       width:c.hl * s, height:c.hw * s, rx:1.2 * s,
       fill:"#2fd3c4", "fill-opacity":.8, stroke:"#8ff2e8" }));
@@ -217,6 +315,12 @@ function drawStats(c){
     ["Рёбер на штоке", c.zs.length],
     ["Высота всего", fmt(c.stemLen + c.headT, "мм")]
   ];
+  if (TOPPED(c.model)) rows.push(
+    ["Площадка", fmt(c.baseW) + " × " + fmt(c.baseL) + " × " + fmt(c.baseT, "мм")],
+    ["Жгут / трубка", fmt(c.bundleD, "мм")],
+    ...(SADDLE(c.model) ? [["Хомут наружу", fmt(c.bundleD + 2 * c.wall, "мм")],
+                           ["Ширина хомута", fmt(c.clipW, "мм")]] : []),
+    ...(PLATE(c.model) ? [["Прорезь", fmt(c.tieW) + " × " + fmt(c.tieT, "мм")]] : []));
   if (THREADED(c.model)) rows.push(
     ["Канал под винт", fmt(c.boreD, "мм")],
     ["Резьба: шаг", fmt(c.thrPitch, "мм")],
@@ -283,7 +387,7 @@ function initThree(){
 
   function place(){
     const H = host.clientHeight || 1, W = host.clientWidth || 1;
-    if (VIEW === "iso") {
+    if (VIEW === "draw") {
       const a = 0.62, b = Math.PI / 4, d = 400;
       camO.position.set(d * Math.cos(a) * Math.sin(b), d * Math.sin(a), d * Math.cos(a) * Math.cos(b));
       const k = TH.span / 2 * 1.25, asp = W / H;
@@ -296,7 +400,7 @@ function initThree(){
     }
     draw();
   }
-  function draw(){ ren.render(sc, VIEW === "iso" ? camO : camP); }
+  function draw(){ ren.render(sc, VIEW === "draw" ? camO : camP); }
   TH.place = place; TH.draw = draw;
 }
 
@@ -368,6 +472,33 @@ function partTris(c, cut){
         c.hl - 2.4, 1.15, c.hw - 1.2));
     return { body:t, barb:[], pin:[] };
   }
+  if (TOPPED(m)) {
+    /* шток — тело вращения; площадка и хомуты — коробки и выдавленные сечения */
+    let t = latheTris(stemProfile(c), 96, cut);
+    const zTop = -c.baseT;
+    if (PLATE(m)) {
+      /* плита с прорезью под стяжку собрана из четырёх брусков —
+         вычитания нет, значит нечему ломаться при экспорте */
+      const W = c.baseW, Lg = c.baseL, T = c.baseT + 0.3;
+      const sw = c.tieW, st = c.tieT, zs = zTop + (T - st) / 2;
+      t = t.concat(boxTris(-W/2, zTop, -Lg/2, (W - sw) / 2, T, Lg));
+      t = t.concat(boxTris(sw/2, zTop, -Lg/2, (W - sw) / 2, T, Lg));
+      t = t.concat(boxTris(-sw/2, zTop, -Lg/2, sw, zs - zTop, Lg));
+      t = t.concat(boxTris(-sw/2, zs + st, -Lg/2, sw, zTop + T - (zs + st), Lg));
+    } else {
+      const seats = (m === "hose_clip") ? c.seats : 1;
+      const step = c.bundleD + 2 * c.wall + 1.2;
+      const x0 = -(step * (seats - 1)) / 2;
+      t = t.concat(boxTris(-c.baseW/2, zTop, -c.baseL/2, c.baseW, c.baseT + 0.3, c.baseL));
+      const seat = cSeatPoly(c.bundleD, c.wall, c.gapDeg).map(([x, z]) => [x, -z]);
+      const dz = -c.baseT + 1.0 - (c.bundleD / 2 + c.wall);
+      for (let i = 0; i < seats; i++) {
+        const dx = x0 + i * step;
+        t = t.concat(prismTris(seat.map(([x, z]) => [x + dx, z + dz]), c.baseL));
+      }
+    }
+    return { body:t, barb:[], pin:[] };
+  }
   if (THREADED(m)) {
     /* корпус — кольцевой контур с каналом под винт, без операций вычитания */
     const body = latheTris(boredProfile(c, c.boreD), 96, cut);
@@ -425,11 +556,11 @@ function updateMesh(c){
 function setView(v){
   VIEW = v;
   for (const b of $("segView").children) b.setAttribute("aria-selected", b.dataset.v === v);
-  $("stage3d").hidden = (v === "three");
-  $("stageFlat").hidden = (v !== "three");
-  $("lbl3d").textContent = v === "iso"
-    ? "Изометрия — фиксированный угол, как на чертеже"
-    : "3D-модель — тяните мышью, колесо приближает";
+  $("stage3d").hidden = (v !== "3d");
+  $("stageFlat").hidden = (v !== "draw");
+  /* канвас один на оба режима — просто переезжает между вкладками */
+  const host = v === "3d" ? $("glHost3d") : $("glHostIso");
+  if ($("gl").parentNode !== host) host.appendChild($("gl"));
   if (TH.ready) { requestAnimationFrame(() => {
     const H = TH.host.clientHeight, W = TH.host.clientWidth;
     if (W && H) { TH.camP.aspect = W / H; TH.camP.updateProjectionMatrix(); TH.ren.setSize(W, H); }
@@ -576,6 +707,7 @@ function applyPart(r){
   if (r.hw && r.hl) { state.hw = Math.min(r.hw, r.hl); state.hl = Math.max(r.hw, r.hl); }
   if (r.sc) { state.screw = r.sc; state.thrPitch = null; state.thrDepth = null; }
   if (r.sd) state.stemD = r.sd;
+  if (r.bd) state.bundleD = r.bd;      // диаметр жгута из описания каталога
   dlgCat.close(); buildChips(); buildControls(); render();
 }
 
