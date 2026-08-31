@@ -5,6 +5,8 @@
    [Volt] [DISCO] [Nifco] — из каталога. [ДОПУЩЕНИЕ] — нигде не опубликовано.
    ===================================================================== */
 
+/*__NODE__*/const { helixTris, helixScad } = require("./thread.js");/*__ENDNODE__*/
+
 const MODELS = {
   firtree:      { ru:"Ёлочка",                 short:"Ёлочка",      head:"round" },
   push:         { ru:"Пистон нажимной",        short:"Пистон",      head:"round" },
@@ -15,7 +17,9 @@ const MODELS = {
   moulding:     { ru:"Клипса молдинга",        short:"Молдинг",     head:"rect" },
   hood:         { ru:"Пистон шумоизоляции",    short:"Шумоизол.",   head:"round" },
   hole_plug:    { ru:"Заглушка отверстия",     short:"Заглушка",    head:"round" },
-  grommet:      { ru:"Закладная гайка",        short:"Гайка",       head:"round" }
+  grommet:      { ru:"Закладная гайка",        short:"Гайка",       head:"round" },
+  screw_rivet:  { ru:"Винтовой распорный",     short:"Винтовой",    head:"round" },
+  plate_nut:    { ru:"Гайка под номер",        short:"Гайка ном.",  head:"round" }
 };
 
 /* Что делает каждое семейство и где стоит — показывается в подсказке */
@@ -29,7 +33,9 @@ const ABOUT = {
   moulding:     "Голова захвачена в Т-паз молдинга, шток в кузов. Часто с бутиловым герметиком.",
   hood:         "Очень большая голова при коротком штоке — распределяет нагрузку по мягкому материалу.",
   hole_plug:    "Несущей функции нет, просто закрывает технологическое отверстие кузова.",
-  grommet:      "Нейлоновый корпус в КВАДРАТНОЕ отверстие, саморез нарезает резьбу внутри. Вся японская защита картера."
+  grommet:      "Нейлоновый корпус в КВАДРАТНОЕ отверстие, саморез нарезает резьбу внутри. Вся японская защита картера.",
+  screw_rivet:  "Втулка в отверстие плюс пластиковый винт с крупной резьбой: вкручивание распирает лепестки. Снимается отвёрткой, ставится обратно. Защита Toyota и Mazda, подкрылки, кожух двигателя.",
+  plate_nut:    "Нейлоновый бочонок в отверстие, саморез нарезает резьбу внутри. Номерной знак, эмблемы. Размер по винту M3.5 / 4.2 / 4.8 / 6.3."
 };
 
 const RULES = {
@@ -37,7 +43,8 @@ const RULES = {
      [DISCO] пистон 2.0-2.5. Общего коэффициента не существует. */
   headRatio: { firtree:2.80, push:2.40, two_piece:2.40, trim_panel:2.20,
                headliner:2.20, weatherstrip:2.40, moulding:2.60,
-               hood:4.30, hole_plug:1.35, grommet:2.40 },
+               hood:4.30, hole_plug:1.35, grommet:2.40,
+               screw_rivet:2.30, plate_nut:2.00 },
 
   stemLen: {
     firtree:      (p) => p.pmax + 0.52 * p.hole,   // [Volt] 22 артикула, 0.48-0.56
@@ -49,7 +56,9 @@ const RULES = {
     moulding:     (p) => p.pmax + 7,
     hood:         (p) => p.pmax + 11,              // Toyota 90467-09008: 17 при панели 6
     hole_plug:    (p) => p.pmax + 3,
-    grommet:      (p) => p.pmax + 8
+    grommet:      (p) => p.pmax + 8,
+    screw_rivet:  (p) => p.pmax + 9,     // [families] захват 2-8, корпус короче пистона
+    plate_nut:    (p) => p.pmax + 6      // [families] бочонок, захват 2-5
   },
 
   /* Натяг ПО ДИАМЕТРУ. [Volt] 0.33-0.69; семейство 7.92 ровно 0.34 на всех шести */
@@ -57,7 +66,8 @@ const RULES = {
     firtree: (p) => (p.hole > 7.6 && p.hole < 8.2) ? 0.34 : 0.55,
     push: () => 0.40, two_piece: () => 0.35, trim_panel: () => 0.45,
     headliner: () => 0.45, weatherstrip: () => 0.45, moulding: () => 0.45,
-    hood: () => 0.45, hole_plug: () => 0.30, grommet: () => 0.45
+    hood: () => 0.45, hole_plug: () => 0.30, grommet: () => 0.45,
+    screw_rivet: () => 0.50, plate_nut: () => 0.50
   },
 
   stemD: {
@@ -69,7 +79,8 @@ const RULES = {
   },
 
   barbCount: { firtree:5, push:2, two_piece:2, trim_panel:2, headliner:3,
-               weatherstrip:3, moulding:3, hood:4, hole_plug:2, grommet:3 }
+               weatherstrip:3, moulding:3, hood:4, hole_plug:2, grommet:3,
+               screw_rivet:2, plate_nut:2 }
 };
 
 const DEFAULTS = {
@@ -80,12 +91,16 @@ const DEFAULTS = {
   barbCount:null, barbD:null, interference:null,
   rootT:null, pitch:null, rakeOut:10, rakeInTgt:32,
   skirt:false, screw:5.0, blen:null, closed:false, wingOut:0.9,
-  pinD:null
+  pinD:null,
+  /* резьба: шаг и высота витка. -1 = посчитать от диаметра винта */
+  thrPitch:null, thrDepth:null, showScrew:true
 };
 
 const r2 = (v) => Math.round(v * 100) / 100;
-const TWO_HEAD = (m) => m === "trim_panel";
+const TWO_HEAD  = (m) => m === "trim_panel";
 const RECT_HEAD = (m) => m === "weatherstrip" || m === "moulding";
+/* Семейства, у которых есть винт с настоящей резьбой */
+const THREADED  = (m) => m === "screw_rivet" || m === "plate_nut";
 
 function derive(p) {
   const m = p.model;
@@ -131,7 +146,15 @@ function derive(p) {
   return { ...p, headD, head2D, stemD, stemLen: stemLenFix, intf, barbD, nBarb, dR, backLen,
            rootT, rampLen, rakeIn, pitch, firstZ, tip, zs,
            blen: p.blen ?? (p.closed ? 14.0 : 8.0),
-           pinD: p.pinD ?? Math.max(2.2, stemD * 0.5) };
+           pinD: p.pinD ?? Math.max(2.2, stemD * 0.5),
+           /* Крупная резьба пластикового винта: шаг примерно 0.5 диаметра,
+              высота витка 0.22 диаметра. Мелкая метрическая тут не работает —
+              нейлон её срывает. [ДОПУЩЕНИЕ, значения не публикуются] */
+           thrPitch: p.thrPitch ?? Math.max(1.4, p.screw * 0.5),
+           thrDepth: p.thrDepth ?? Math.max(0.45, p.screw * 0.22),
+           screwCore: Math.max(1.6, p.screw * 0.62),
+           screwLen: Math.min(stemLenFix * 0.95, p.pmax + 9),
+           boreD: Math.max(1.4, p.screw * 0.66) };
 }
 
 function checks(c) {
@@ -213,6 +236,26 @@ function buildProfile(c) {
   add(Math.max(0.6, c.stemD * 0.45) / 2, c.stemLen);
   add(0, c.stemLen);
   return P;
+}
+
+/* Контур корпуса с осевым каналом под винт. Контур замкнут кольцом и
+   НЕ касается оси — вращение даёт настоящую трубу, а не тело с дыркой,
+   пробитой отдельной операцией. Так меш и .scad совпадают точно. */
+function boredProfile(c, boreD) {
+  const rb = boreD / 2;
+  const P = buildProfile(c).slice(1, -1);          // без точек на оси
+  const tipIdx = P.length - 1;
+  if (P[tipIdx][0] < rb + 0.45) P[tipIdx] = [rb + 0.45, P[tipIdx][1]];
+  return [[rb, P[0][1]], ...P, [rb, P[tipIdx][1]]];
+}
+
+/* Ядро винта: гладкий цилиндр с головкой под отвёртку.
+   Витки навешиваются отдельно модулем резьбы. */
+function screwCoreProfile(c) {
+  const r = c.screwCore / 2, hd = Math.min(c.headD * 0.62, c.hole * 1.6) / 2;
+  const t = c.headT * 1.1;
+  return [[0, -t], [hd, -t], [hd, 0], [r, 0.6], [r, c.screwLen - 0.8],
+          [r * 0.5, c.screwLen], [0, c.screwLen]];
 }
 
 /* Контур одного штока без головы, замкнутый на ось —
@@ -301,6 +344,23 @@ function toScad(c) {
       L.push(`    translate([dx*${n(c.hl/2 - r - 1.2)}, 0, 0]) cylinder(h=1.15, r=${n(r)});`);
     }
     L.push(`}`);
+  } else if (THREADED(c.model)) {
+    L.push(`// КОРПУС с каналом под винт (контур уже кольцевой, дырка не вычитается)`);
+    L.push(`rotate_extrude() polygon([`);
+    L.push(boredProfile(c, c.boreD).map(([r, z]) => `  [${n(r)}, ${n(z)}]`).join(",\n"));
+    L.push(`]);`);
+    if (c.showScrew) {
+      const turns = Math.max(2, (c.screwLen - 1.6) / c.thrPitch);
+      L.push(``, `// ВИНТ с НАСТОЯЩЕЙ спиральной резьбой — стоит рядом, печатается вместе.`);
+      L.push(`// Шаг ${n(c.thrPitch)}, высота витка ${n(c.thrDepth)}, витков ${n(turns)}.`);
+      L.push(`// Кольцевыми проточками такая деталь не закрутится, поэтому спираль настоящая.`);
+      L.push(`translate([${n(c.headD * 0.85)}, 0, 0]) union(){`);
+      L.push(`  rotate_extrude() polygon([`);
+      L.push(screwCoreProfile(c).map(([r, z]) => `    [${n(r)}, ${n(z)}]`).join(",\n"));
+      L.push(`  ]);`);
+      L.push(`  ${helixScad(c.screwCore / 2, c.thrDepth, c.thrPitch, turns, 0.9)};`);
+      L.push(`}`);
+    }
   } else if (c.model === "two_piece") {
     L.push(`// ВТУЛКА (корпус)`);
     L.push(`difference(){`);
@@ -321,5 +381,6 @@ function toScad(c) {
 /*__NODE__*/
 if (typeof module !== "undefined")
   module.exports = { MODELS, ABOUT, RULES, DEFAULTS, derive, checks, toScad, r2,
-                     buildProfile, stemProfile, buildPinProfile, buildSleeveProfile, TWO_HEAD, RECT_HEAD };
+                     buildProfile, stemProfile, buildPinProfile, buildSleeveProfile, boredProfile,
+                     screwCoreProfile, TWO_HEAD, RECT_HEAD, THREADED };
 /*__ENDNODE__*/

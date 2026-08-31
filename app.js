@@ -43,7 +43,15 @@ const FIELDS = {
       hint:"[Volt] у ёлочек это КОНСТАНТА 2.03-2.54 на всех 22 артикулах" },
     { k:"rakeOut", ru:"Угол удержания", min:0, max:30, step:1, unit:"°",
       hint:"От перпендикуляра. Меньше — держит крепче, но тяжелее снять" },
-    { k:"pinD", ru:"Диаметр сердечника", min:1.5, max:10, step:0.1, unit:"мм", auto:true, only:["two_piece"] }
+    { k:"pinD", ru:"Диаметр сердечника", min:1.5, max:10, step:0.1, unit:"мм", auto:true, only:["two_piece"] },
+    { k:"screw", ru:"Диаметр винта", min:2.5, max:9, step:0.1, unit:"мм", only:["screw_rivet","plate_nut"],
+      hint:"[families] гайка под номер идёт по винту M3.5 / 4.2 / 4.8 / 6.3" },
+    { k:"thrPitch", ru:"Шаг резьбы", min:0.8, max:5, step:0.05, unit:"мм", auto:true,
+      only:["screw_rivet","plate_nut"],
+      hint:"Авто: 0.5 × диаметр винта. Крупная — мелкую метрическую нейлон срывает [ДОПУЩЕНИЕ]" },
+    { k:"thrDepth", ru:"Высота витка", min:0.2, max:2.5, step:0.05, unit:"мм", auto:true,
+      only:["screw_rivet","plate_nut"],
+      hint:"Авто: 0.22 × диаметр винта" }
   ]
 };
 
@@ -56,7 +64,7 @@ function buildChips(){
     b.setAttribute("aria-selected", k === state.model);
     b.onclick = () => {
       state.model = k;
-      for (const key of ["head","head2","stemLen","stemD","interference","barbCount","rootT","pitch","blen","pinD"])
+      for (const key of ["head","head2","stemLen","stemD","interference","barbCount","rootT","pitch","blen","pinD","thrPitch","thrDepth"])
         state[key] = null;
       buildChips(); buildControls(); render();
     };
@@ -91,7 +99,7 @@ const fmt = (v, u) => (Math.round(v * 100) / 100) + (u ? " " + u : "");
 function resolved(c, k){
   return ({ stemLen:c.stemLen, head:c.headD, head2:c.head2D, stemD:c.stemD,
             interference:c.intf, barbCount:c.zs.length, rootT:c.rootT,
-            blen:c.blen, pinD:c.pinD })[k] ?? state[k];
+            blen:c.blen, pinD:c.pinD, thrPitch:c.thrPitch, thrDepth:c.thrDepth })[k] ?? state[k];
 }
 
 function render(){
@@ -209,6 +217,12 @@ function drawStats(c){
     ["Рёбер на штоке", c.zs.length],
     ["Высота всего", fmt(c.stemLen + c.headT, "мм")]
   ];
+  if (THREADED(c.model)) rows.push(
+    ["Канал под винт", fmt(c.boreD, "мм")],
+    ["Резьба: шаг", fmt(c.thrPitch, "мм")],
+    ["Резьба: высота витка", fmt(c.thrDepth, "мм")],
+    ["Витков", fmt(Math.max(2, (c.screwLen - 1.6) / c.thrPitch))]
+  );
   $("stats").innerHTML = rows.map(([a, b]) =>
     `<div class="stat"><span>${a}</span><b>${b}</b></div>`).join("");
 }
@@ -353,6 +367,18 @@ function partTris(c, cut){
       t = t.concat(boxTris(-(c.hl/2 - 1.2), -c.headT - 0.9, -(c.hw/2 - 0.6),
         c.hl - 2.4, 1.15, c.hw - 1.2));
     return { body:t, barb:[], pin:[] };
+  }
+  if (THREADED(m)) {
+    /* корпус — кольцевой контур с каналом под винт, без операций вычитания */
+    const body = latheTris(boredProfile(c, c.boreD), 96, cut);
+    let pin = [];
+    if (c.showScrew) {
+      const turns = Math.max(2, (c.screwLen - 1.6) / c.thrPitch);
+      pin = latheTris(screwCoreProfile(c), 64, cut)
+            .concat(helixTris(c.screwCore / 2, c.thrDepth, c.thrPitch, turns, 0.9, 26));
+      pin = shiftX(pin, c.headD * 0.85);
+    }
+    return { body, barb:[], pin };
   }
   const body = latheTris(buildProfile(c), 96, cut);
   const pin = (m === "two_piece") ? shiftX(latheTris(buildPinProfile(c), 64, cut), c.headD * 0.8) : [];
@@ -540,7 +566,7 @@ function buildCatalog(){
 /* Подставляем то, что опубликовано; остальное досчитывается правилами семейства */
 function applyPart(r){
   if (r.g && MODELS[r.g]) state.model = r.g;
-  for (const k of ["head","head2","stemLen","stemD","interference","barbCount","rootT","pitch","blen","pinD"])
+  for (const k of ["head","head2","stemLen","stemD","interference","barbCount","rootT","pitch","blen","pinD","thrPitch","thrDepth"])
     state[k] = null;
   if (r.h)  state.hole = r.h;
   if (r.g0) state.pmin = r.g0;
@@ -548,7 +574,7 @@ function applyPart(r){
   if (r.hd) state.head = r.hd;
   if (r.st) state.stemLen = r.st;
   if (r.hw && r.hl) { state.hw = Math.min(r.hw, r.hl); state.hl = Math.max(r.hw, r.hl); }
-  if (r.sc) state.screw = r.sc;
+  if (r.sc) { state.screw = r.sc; state.thrPitch = null; state.thrDepth = null; }
   if (r.sd) state.stemD = r.sd;
   dlgCat.close(); buildChips(); buildControls(); render();
 }
