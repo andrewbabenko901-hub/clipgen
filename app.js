@@ -65,7 +65,16 @@ const FIELDS = {
     { k:"seats", ru:"Число гнёзд", min:1, max:4, step:1, unit:"", only:["hose_clip"] },
     { k:"tieW", ru:"Ширина прорези", min:2.5, max:12, step:0.1, unit:"мм", only:["tie_mount"],
       hint:"Под стандартную стяжку 4.8 мм берут 5.0-5.2" },
-    { k:"tieT", ru:"Толщина прорези", min:0.8, max:4, step:0.1, unit:"мм", only:["tie_mount"] }
+    { k:"tieT", ru:"Толщина прорези", min:0.8, max:4, step:0.1, unit:"мм", only:["tie_mount"] },
+    { k:"strapLen", ru:"Длина ленты", min:60, max:300, step:1, unit:"мм", only:["push_tie"],
+      hint:"В каталоге это Overall Length. Должна быть не меньше расчётной под жгут" },
+    { k:"strapW", ru:"Ширина ленты", min:2.5, max:9, step:0.1, unit:"мм", only:["push_tie"] },
+    { k:"strapT", ru:"Толщина ленты", min:0.7, max:2.5, step:0.05, unit:"мм", only:["push_tie"] },
+    { k:"toothPitch", ru:"Шаг зубьев", min:0.7, max:2.5, step:0.05, unit:"мм", only:["push_tie"],
+      hint:"Мельче — плавнее затяжка, но на печати зубья слипаются. Ниже 1.0 рискованно" },
+    { k:"edgeT", ru:"Толщина кромки", min:0.5, max:6, step:0.1, unit:"мм", auto:true, only:["edge_clip"],
+      hint:"Авто: середина диапазона панели. Скоба держит трением, поэтому размер критичен" },
+    { k:"jawD", ru:"Глубина захвата", min:5, max:25, step:0.5, unit:"мм", only:["edge_clip"] }
   ]
 };
 
@@ -257,7 +266,9 @@ function drawBack(c){
 function drawTop(c){
   const svg = $("svgTop"); svg.innerHTML = "";
   const W = 300, H = 330, cx = W / 2, cy = H / 2 - 6;
-  const R = TOPPED(c.model) ? Math.max(c.baseW, c.baseL) / 2
+  const R = EDGE(c.model) ? Math.max(c.jawD, c.clipW) / 2 + c.bundleD / 2
+          : PUSH_TIE(c.model) ? Math.max(c.strapLen * 0.12, c.baseW, c.baseL) / 2
+          : TOPPED(c.model) ? Math.max(c.baseW, c.baseL) / 2
           : RECT_HEAD(c.model) ? Math.max(c.hl, c.hw) / 2 : c.headD / 2;
   const s = Math.min((W - 46) / (R * 2), (H - 60) / (R * 2)), s0 = s;
 
@@ -315,7 +326,16 @@ function drawStats(c){
     ["Рёбер на штоке", c.zs.length],
     ["Высота всего", fmt(c.stemLen + c.headT, "мм")]
   ];
-  if (TOPPED(c.model)) rows.push(
+  if (EDGE(c.model)) rows.push(
+    ["Кромка панели", fmt(c.edgeT, "мм")],
+    ["Глубина захвата", fmt(c.jawD, "мм")],
+    ["Жгут", fmt(c.bundleD, "мм")],
+    ["Ширина скобы", fmt(c.clipW, "мм")]);
+  if (PUSH_TIE(c.model)) rows.push(
+    ["Лента", fmt(c.strapLen) + " × " + fmt(c.strapW) + " × " + fmt(c.strapT, "мм")],
+    ["Зуб", fmt(c.toothPitch) + " / " + fmt(c.toothD, "мм")],
+    ["Нужно под жгут", fmt(c.strapNeed, "мм")]);
+  if (TOPPED(c.model) && !PUSH_TIE(c.model)) rows.push(
     ["Площадка", fmt(c.baseW) + " × " + fmt(c.baseL) + " × " + fmt(c.baseT, "мм")],
     ["Жгут / трубка", fmt(c.bundleD, "мм")],
     ...(SADDLE(c.model) ? [["Хомут наружу", fmt(c.bundleD + 2 * c.wall, "мм")],
@@ -472,6 +492,29 @@ function partTris(c, cut){
         c.hl - 2.4, 1.15, c.hw - 1.2));
     return { body:t, barb:[], pin:[] };
   }
+  if (EDGE(m)) {
+    let t = prismTris(edgePoly(c.edgeT, c.wall, c.jawD), c.clipW);
+    const ro = c.bundleD / 2 + c.wall;
+    const seat = cSeatPoly(c.bundleD, c.wall, c.gapDeg).map(([x, z]) => [x, -z]);
+    const dz = -(c.edgeT / 2 + c.wall) + 1.0 - ro, dx = c.jawD * 0.42;
+    t = t.concat(prismTris(seat.map(([x, z]) => [x + dx, z + dz]), c.clipW));
+    return { body:t, barb:[], pin:[] };
+  }
+  if (PUSH_TIE(m)) {
+    const W = c.baseW, Lg = c.baseL, T = c.baseT + 0.3, zTop = -c.baseT;
+    const sw = c.strapW + 0.4, st = c.strapT + 0.35, bz = zTop - (st + 2 * c.wall);
+    let t = latheTris(stemProfile(c), 96, cut);
+    t = t.concat(boxTris(-W/2, zTop, -Lg/2, W, T, Lg));
+    /* замок: три стенки вокруг окна — вычитания нет, меш и .scad совпадают */
+    t = t.concat(boxTris(-W/2, bz, -sw/2 - c.wall, W, st + 2*c.wall, c.wall));
+    t = t.concat(boxTris(-W/2, bz, sw/2, W, st + 2*c.wall, c.wall));
+    t = t.concat(boxTris(-W/2, bz, -sw/2, W, c.wall, sw));
+    /* лента с храповиком */
+    const sp = strapPoly(c.strapLen, c.strapT, c.toothPitch, c.toothD)
+               .map(([x, z]) => [x + W/2, z + zTop]);
+    t = t.concat(prismTris(sp, c.strapW));
+    return { body:t, barb:[], pin:[] };
+  }
   if (TOPPED(m)) {
     /* шток — тело вращения; площадка и хомуты — коробки и выдавленные сечения */
     let t = latheTris(stemProfile(c), 96, cut);
@@ -596,6 +639,67 @@ const FAMRU = FAMILIES;
 const CAT = CATALOG;
 const BUILDABLE = CAT.filter(r => r.b);
 
+/* Схема детали прямо в карточке каталога: строится тем же ядром,
+   что и модель. Не фотография и не чужая картинка — свой силуэт из размеров. */
+function stateFromRow(r){
+  const s = { ...DEFAULTS };
+  if (r.g && MODELS[r.g]) s.model = r.g;
+  if (r.h)  s.hole = r.h;
+  if (r.g0) s.pmin = r.g0;
+  if (r.g1) s.pmax = Math.max(r.g1, (r.g0 || 0) + 0.5);
+  if (r.p0) { s.pmin = r.p0; s.pmax = Math.max(r.p1 || r.p0, r.p0 + 0.3); }
+  if (r.hd) s.head = r.hd;
+  if (r.st) s.stemLen = r.st;
+  if (r.hw && r.hl) { s.hw = Math.min(r.hw, r.hl); s.hl = Math.max(r.hw, r.hl); }
+  if (r.sc) s.screw = r.sc;
+  if (r.sd) s.stemD = r.sd;
+  if (r.bd) s.bundleD = r.bd;
+  if (r.sl) s.strapLen = r.sl;
+  return s;
+}
+
+function miniSvg(r){
+  let c;
+  try { c = derive(stateFromRow(r)); } catch(e) { return ""; }
+  const W = 58, H = 58, m = c.model;
+  const seg = [];
+  const add = (d, cl) => seg.push(`<path d="${d}" ${cl}/>`);
+  const solid = 'fill="#2fd3c4" fill-opacity=".85" stroke="#8ff2e8" stroke-width=".7"';
+  const barb  = 'fill="#f0a34a" fill-opacity=".9" stroke="none"';
+
+  /* габарит детали в мм, чтобы вписать в квадратик */
+  const topH = TOPPED(m) ? c.baseT + (SADDLE(m) ? c.bundleD + 2*c.wall : 3) : c.headT;
+  const hi = EDGE(m) ? c.jawD : c.stemLen;
+  const wide = EDGE(m) ? c.edgeT + 2*c.wall + c.bundleD
+             : PUSH_TIE(m) ? Math.max(c.baseW, 22)
+             : TOPPED(m) ? c.baseW
+             : RECT_HEAD(m) ? c.hl : c.headD;
+  const span = Math.max(wide, hi + topH) * 1.12;
+  const s = Math.min(W, H) / span;
+  const X = (x) => W/2 + x*s, Y = (z) => H/2 + (hi/2 - z)*s;
+
+  if (EDGE(m)) {
+    add(edgePoly(c.edgeT, c.wall, c.jawD).map(([x,z],i) =>
+      (i?"L":"M") + (W/2 - c.jawD/2*s + x*s).toFixed(1) + " " + (H/2 - z*s).toFixed(1)).join(" ") + "Z", solid);
+  } else {
+    /* шток с рёбрами */
+    const P = TOPPED(m) ? stemProfile(c) : buildProfile(c);
+    add(P.map(([rr,z],i) => (i?"L":"M") + X(rr).toFixed(1) + " " + Y(z).toFixed(1)).join(" ") + " " +
+        P.slice().reverse().map(([rr,z]) => "L" + X(-rr).toFixed(1) + " " + Y(z).toFixed(1)).join(" ") + "Z", solid);
+    for (const z of c.zs) for (const sg of [-1,1])
+      add(`M${X(sg*c.stemD/2).toFixed(1)} ${Y(z+c.rampLen).toFixed(1)}L${X(sg*c.barbD/2).toFixed(1)} ${Y(z).toFixed(1)}L${X(sg*c.stemD/2).toFixed(1)} ${Y(z-c.backLen).toFixed(1)}Z`, barb);
+    if (TOPPED(m))
+      add(`M${X(-c.baseW/2).toFixed(1)} ${Y(0).toFixed(1)}h${(c.baseW*s).toFixed(1)}v${(c.baseT*s).toFixed(1)}h${(-c.baseW*s).toFixed(1)}Z`, solid);
+    if (SADDLE(m)) {
+      const ro = c.bundleD/2 + c.wall, zc = -c.baseT + 1 - ro;
+      seg.push(`<circle cx="${X(0).toFixed(1)}" cy="${Y(zc).toFixed(1)}" r="${(ro*s).toFixed(1)}" fill="none" stroke="#f0a34a" stroke-width="${(c.wall*s).toFixed(1)}" stroke-dasharray="${(2*Math.PI*ro*s*0.72).toFixed(1)} 99"/>`);
+    }
+    if (PUSH_TIE(m))
+      add(`M${X(c.baseW/2).toFixed(1)} ${Y(-c.baseT).toFixed(1)}h${(Math.min(c.strapLen,26)*s).toFixed(1)}v${(c.strapT*s+1).toFixed(1)}h${(-Math.min(c.strapLen,26)*s).toFixed(1)}Z`, solid);
+  }
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="100%">${seg.join("")}</svg>`;
+}
+
 function catDims(r){
   const a = [];
   if (r.h != null) a.push("отв " + (r.hs === "square" || r.hs === "кв" ? "кв " : "Ø") + r.h);
@@ -670,10 +774,14 @@ function buildCatalog(){
 
     $("catGrid").innerHTML = rows.slice(0, 240).map((r, i) => {
       const idx = CAT.indexOf(r);
-      const ph = r.i
+      const scheme = r.b ? miniSvg(r) : "";
+      const wantScheme = $("onlyScheme").checked;
+      const ph = (r.i && !wantScheme)
         ? `<div class="ph"><img loading="lazy" src="${r.i}" alt=""
-             onerror="this.parentNode.innerHTML='<span>нет фото</span>'"></div>`
-        : `<div class="ph"><span>нет фото</span></div>`;
+             onerror="this.parentNode.innerHTML='${scheme ? "" : "<span>нет фото</span>"}'">${""}</div>`
+        : scheme
+          ? `<div class="ph sch">${scheme}</div>`
+          : `<div class="ph"><span>нет фото</span></div>`;
       return `<div class="cc ${r.b ? "" : "no"}" data-i="${idx}" title="${r.b ? "нажми — параметры уйдут в генератор" : "данных для построения не хватает"}">
         ${ph}<div class="bd">
           <div class="pn">${r.p}</div>
@@ -689,7 +797,7 @@ function buildCatalog(){
 
   for (const id of ["catFam","catBrand","catSrc","mTol"]) $(id).onchange = upd;
   for (const id of ["catSearch","mHole","mHead","mStem"]) $(id).oninput = upd;
-  for (const id of ["onlyBuild","onlyImg"]) $(id).onchange = upd;
+  for (const id of ["onlyBuild","onlyImg","onlyScheme"]) $(id).onchange = upd;
   $("mClear").onclick = () => { for (const id of ["mHole","mHead","mStem"]) $(id).value = ""; upd(); };
   upd();
 }
@@ -708,6 +816,8 @@ function applyPart(r){
   if (r.sc) { state.screw = r.sc; state.thrPitch = null; state.thrDepth = null; }
   if (r.sd) state.stemD = r.sd;
   if (r.bd) state.bundleD = r.bd;      // диаметр жгута из описания каталога
+  if (r.sl) state.strapLen = r.sl;     // полная длина ленты стяжки
+  if (r.p0) { state.pmin = r.p0; state.pmax = Math.max(r.p1 || r.p0, r.p0 + 0.3); }
   dlgCat.close(); buildChips(); buildControls(); render();
 }
 

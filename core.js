@@ -22,7 +22,9 @@ const MODELS = {
   plate_nut:    { ru:"Гайка под номер",        short:"Гайка ном.",  head:"round" },
   cable_saddle: { ru:"Держатель проводки",     short:"Проводка",    head:"saddle" },
   hose_clip:    { ru:"Клипса шлангов и трубок",short:"Шланги",      head:"saddle" },
-  tie_mount:    { ru:"Площадка под стяжку",    short:"Стяжка",      head:"plate" }
+  tie_mount:    { ru:"Площадка под стяжку",    short:"Стяжка",      head:"plate" },
+  push_tie:     { ru:"Стяжка с ёлочкой",       short:"Стяжка+шток", head:"plate" },
+  edge_clip:    { ru:"Кромочный зажим",        short:"Кромка",      head:"edge"  }
 };
 
 /* Что делает каждое семейство и где стоит — показывается в подсказке */
@@ -41,7 +43,9 @@ const ABOUT = {
   plate_nut:    "Нейлоновый бочонок в отверстие, саморез нарезает резьбу внутри. Номерной знак, эмблемы. Размер по винту M3.5 / 4.2 / 4.8 / 6.3.",
   cable_saddle: "Ложемент-защёлка на ёлочном штоке. Жгут заводится сверху и защёлкивается. В каталоге размер даётся как I.D. — внутренний диаметр под жгут. Моторный отсек, салон, двери.",
   hose_clip:    "Одно или несколько гнёзд под трубку на общем штоке. Топливные, тормозные и омывающие магистрали. Размер по НАРУЖНОМУ диаметру трубки.",
-  tie_mount:    "Плоская площадка с прорезью под пластиковую стяжку, снизу ёлочный шток. Самое универсальное решение: диаметр жгута задаёт стяжка, а не деталь."
+  tie_mount:    "Плоская площадка с прорезью под пластиковую стяжку, снизу ёлочный шток. Самое универсальное решение: диаметр жгута задаёт стяжка, а не деталь.",
+  push_tie:     "Стяжка и крепление одной деталью: ёлочный шток в отверстие, замок с храповиком и лента с зубьями. В каталоге даётся размер отверстия, полная длина ленты и максимальный диаметр жгута.",
+  edge_clip:    "Отверстие не нужно: пружинный зажим надевается на кромку панели и держится трением. Сверху прорезь под стяжку. В каталоге даётся диапазон толщины кромки."
 };
 
 const RULES = {
@@ -51,7 +55,8 @@ const RULES = {
                headliner:2.20, weatherstrip:2.40, moulding:2.60,
                hood:4.30, hole_plug:1.35, grommet:2.40,
                screw_rivet:2.30, plate_nut:2.00,
-               cable_saddle:2.20, hose_clip:2.20, tie_mount:2.20 },
+               cable_saddle:2.20, hose_clip:2.20, tie_mount:2.20,
+               push_tie:2.20, edge_clip:2.20 },
 
   stemLen: {
     firtree:      (p) => p.pmax + 0.52 * p.hole,   // [Volt] 22 артикула, 0.48-0.56
@@ -68,7 +73,9 @@ const RULES = {
     plate_nut:    (p) => p.pmax + 6,     // [families] бочонок, захват 2-5
     cable_saddle: (p) => p.pmax + 7,     // [families] проводка, захват 0.7-5.0
     hose_clip:    (p) => p.pmax + 7,
-    tie_mount:    (p) => p.pmax + 7
+    tie_mount:    (p) => p.pmax + 7,
+    push_tie:     (p) => p.pmax + 7,
+    edge_clip:    (p) => 0            // отверстие не нужно, штока нет
   },
 
   /* Натяг ПО ДИАМЕТРУ. [Volt] 0.33-0.69; семейство 7.92 ровно 0.34 на всех шести */
@@ -78,7 +85,8 @@ const RULES = {
     headliner: () => 0.45, weatherstrip: () => 0.45, moulding: () => 0.45,
     hood: () => 0.45, hole_plug: () => 0.30, grommet: () => 0.45,
     screw_rivet: () => 0.50, plate_nut: () => 0.50,
-    cable_saddle: () => 0.45, hose_clip: () => 0.45, tie_mount: () => 0.45
+    cable_saddle: () => 0.45, hose_clip: () => 0.45, tie_mount: () => 0.45,
+    push_tie: () => 0.45, edge_clip: () => 0.45
   },
 
   stemD: {
@@ -92,7 +100,8 @@ const RULES = {
   barbCount: { firtree:5, push:2, two_piece:2, trim_panel:2, headliner:3,
                weatherstrip:3, moulding:3, hood:4, hole_plug:2, grommet:3,
                screw_rivet:2, plate_nut:2,
-               cable_saddle:3, hose_clip:3, tie_mount:3 }
+               cable_saddle:3, hose_clip:3, tie_mount:3,
+               push_tie:3, edge_clip:0 }
 };
 
 const DEFAULTS = {
@@ -112,7 +121,11 @@ const DEFAULTS = {
   gapDeg:52,      // раскрытие защёлки, градусов на сторону от верха
   clipW:null,     // ширина хомута вдоль оси жгута
   seats:2,        // число гнёзд у шланговой клипсы
-  tieW:5.0, tieT:1.6   // прорезь под стяжку: ширина и толщина
+  tieW:5.0, tieT:1.6,  // прорезь под стяжку: ширина и толщина
+  /* стяжка с ёлочкой */
+  strapW:4.8, strapT:1.2, strapLen:150, toothPitch:1.2, toothD:0.35,
+  /* кромочный зажим */
+  jawD:11.0, edgeT:null   // глубина захвата кромки и толщина кромки
 };
 
 const r2 = (v) => Math.round(v * 100) / 100;
@@ -123,7 +136,9 @@ const THREADED  = (m) => m === "screw_rivet" || m === "plate_nut";
 /* Семейства с ложементом или площадкой сверху вместо круглой головы */
 const SADDLE    = (m) => m === "cable_saddle" || m === "hose_clip";
 const PLATE     = (m) => m === "tie_mount";
-const TOPPED    = (m) => SADDLE(m) || PLATE(m);
+const PUSH_TIE  = (m) => m === "push_tie";
+const EDGE      = (m) => m === "edge_clip";
+const TOPPED    = (m) => SADDLE(m) || PLATE(m) || PUSH_TIE(m);
 
 /* Сечение хомута-защёлки: наружная дуга по низу, внутренняя обратно,
    сверху разрыв под заводку жгута плюс загнутые губки. */
@@ -202,15 +217,32 @@ function derive(p) {
            boreD: Math.max(1.4, p.screw * 0.66),
            clipW: p.clipW ?? Math.max(5, Math.min(14, p.bundleD * 0.75)),
            baseT: Math.max(1.6, p.wall),
-           baseW: (m === "hose_clip")
-                  ? (p.bundleD + 2 * p.wall + 1.2) * p.seats + 2
-                  : p.bundleD + 2 * p.wall + 3,
-           baseL: (p.clipW ?? Math.max(5, Math.min(14, p.bundleD * 0.75))) + 2.5 };
+           baseW: (m === "hose_clip") ? (p.bundleD + 2 * p.wall + 1.2) * p.seats + 2
+                : (m === "push_tie") ? p.strapW + 2 * p.wall + 2.5
+                : (m === "tie_mount") ? p.tieW + 2 * p.wall + 6
+                : p.bundleD + 2 * p.wall + 3,
+           baseL: (m === "push_tie") ? p.strapW * 2.4
+                : (p.clipW ?? Math.max(5, Math.min(14, p.bundleD * 0.75))) + 2.5,
+           /* Длину ленты можно взять из каталога, а можно посчитать: обхват жгута
+              плюс запас на замок и хвост. Берём большее — иначе не затянется. */
+           strapNeed: Math.PI * p.bundleD + p.strapW * 3 + 12,
+           edgeT: p.edgeT ?? (p.pmin + p.pmax) / 2 };
 }
 
 function checks(c) {
   const out = [];
   const push = (level, text) => out.push({ level, text });
+
+  /* У кромочного зажима штока нет вообще — проверки рёбер к нему не относятся */
+  if (EDGE(c.model)) {
+    if (c.edgeT < c.pmin || c.edgeT > c.pmax)
+      push("warn", `Кромка ${r2(c.edgeT)} вне диапазона панели ${r2(c.pmin)}-${r2(c.pmax)}`);
+    else push("ok", `Кромка ${r2(c.edgeT)} в диапазоне панели ${r2(c.pmin)}-${r2(c.pmax)}`);
+    if (c.jawD < c.bundleD * 0.4)
+      push("warn", "Захват короткий относительно жгута — скоба будет проворачиваться");
+    else push("ok", `Глубина захвата ${r2(c.jawD)} мм`);
+    return out;
+  }
 
   if (c.dR < 0.05) push("bad", "Ребро не выступает за стержень — деталь не будет держать");
   else if (c.dR < 0.15) push("warn", `Вылет ребра всего ${r2(c.dR)} мм — на печати исчезнет в допуске`);
@@ -244,6 +276,13 @@ function checks(c) {
   if (c.hole > 11.5 && c.hole < 12.6)
     push("warn", "12 мм не существует как стандарт — крупный размер это 12.7 (полдюйма)");
 
+  if (c.model === "push_tie") {
+    if (c.strapLen < c.strapNeed)
+      push("bad", `Ленты не хватит: ${r2(c.strapLen)} мм при нужных ${r2(c.strapNeed)} на жгут ${r2(c.bundleD)}`);
+    else push("ok", `Ленты хватает: ${r2(c.strapLen)} при нужных ${r2(c.strapNeed)}`);
+    if (c.toothPitch < 1.0)
+      push("warn", `Шаг зубьев ${r2(c.toothPitch)} — на печати такие зубья слипаются`);
+  }
   if (c.model === "two_piece")
     push("warn", "Внутреннюю пару втулка-штифт не публикует ни один производитель. Без образца не рассчитать");
 
@@ -307,6 +346,30 @@ function screwCoreProfile(c) {
   const t = c.headT * 1.1;
   return [[0, -t], [hd, -t], [hd, 0], [r, 0.6], [r, c.screwLen - 0.8],
           [r * 0.5, c.screwLen], [0, c.screwLen]];
+}
+
+/* Сечение кромочного зажима: пружинная скоба на кромку панели.
+   Губки с подворотом внутрь — они и держат деталь трением. */
+function edgePoly(t, wall, d) {
+  const h = t / 2;
+  return [
+    [-wall, -(h + wall)], [d, -(h + wall)], [d, -h],
+    [d - 1.6, -h + 0.5], [0, -h], [0, h],
+    [d - 1.6, h - 0.5], [d, h], [d, h + wall], [-wall, h + wall]
+  ];
+}
+
+/* Лента стяжки с храповиком: полоса с зубьями по верхней грани.
+   Возвращает 2D-контур в плоскости XZ, начало у замка. */
+function strapPoly(len, t, pitch, depth) {
+  const P = [[0, 0], [len, 0], [len, t * 0.55]];
+  const n = Math.max(2, Math.floor((len - 4) / pitch));
+  for (let i = n; i >= 1; i--) {
+    const x = 3 + i * pitch;
+    P.push([x, t], [x - pitch * 0.45, t], [x - pitch * 0.55, t - depth], [x - pitch, t - depth]);
+  }
+  P.push([0, t]);
+  return P;
 }
 
 /* Контур одного штока без головы, замкнутый на ось —
@@ -395,6 +458,37 @@ function toScad(c) {
       L.push(`    translate([dx*${n(c.hl/2 - r - 1.2)}, 0, 0]) cylinder(h=1.15, r=${n(r)});`);
     }
     L.push(`}`);
+  } else if (EDGE(c.model)) {
+    L.push(`// КРОМОЧНЫЙ ЗАЖИМ: скоба на кромку ${n(c.edgeT)} мм, глубина захвата ${n(c.jawD)}`);
+    L.push(`translate([0, ${n(c.clipW/2)}, 0]) rotate([90,0,0]) linear_extrude(${n(c.clipW)}) polygon([`);
+    L.push(edgePoly(c.edgeT, c.wall, c.jawD).map(([x, z]) => `  [${n(x)}, ${n(z)}]`).join(",\n"));
+    L.push(`]);`);
+    L.push(``, `// ЛОЖЕМЕНТ снаружи: внутренний Ø${n(c.bundleD)}`);
+    L.push(`seat = [`);
+    L.push(cSeatPoly(c.bundleD, c.wall, c.gapDeg).map(([x, z]) => `  [${n(x)}, ${n(-z)}]`).join(",\n"));
+    L.push(`];`);
+    L.push(`translate([${n(c.jawD * 0.42)}, ${n(c.clipW/2)}, ${n(-(c.edgeT/2 + c.wall) + 1.0 - (c.bundleD/2 + c.wall))}])`);
+    L.push(`  rotate([90,0,0]) linear_extrude(${n(c.clipW)}) polygon(seat);`);
+  } else if (PUSH_TIE(c.model)) {
+    const W = c.baseW, Lg = c.baseL, T = c.baseT + 0.3, zTop = -c.baseT;
+    const sw = c.strapW + 0.4, st = c.strapT + 0.35;
+    const bz = zTop - (st + 2 * c.wall);          // замок стоит на площадке
+    L.push(`// ШТОК`);
+    L.push(`rotate_extrude() polygon([`);
+    L.push(stemProfile(c).map(([r, z]) => `  [${n(r)}, ${n(z)}]`).join(",\n"));
+    L.push(`]);`);
+    L.push(``, `// ПЛОЩАДКА И ЗАМОК (собраны из брусков, вычитания нет)`);
+    L.push(`translate([${n(-W/2)}, ${n(-Lg/2)}, ${n(zTop)}]) cube([${n(W)}, ${n(Lg)}, ${n(T)}]);`);
+    L.push(`// стенки замка вокруг окна ${n(sw)} x ${n(st)}`);
+    L.push(`translate([${n(-W/2)}, ${n(-sw/2 - c.wall)}, ${n(bz)}]) cube([${n(W)}, ${n(c.wall)}, ${n(st + 2*c.wall)}]);`);
+    L.push(`translate([${n(-W/2)}, ${n(sw/2)}, ${n(bz)}]) cube([${n(W)}, ${n(c.wall)}, ${n(st + 2*c.wall)}]);`);
+    L.push(`translate([${n(-W/2)}, ${n(-sw/2)}, ${n(bz)}]) cube([${n(W)}, ${n(sw)}, ${n(c.wall)}]);`);
+    L.push(``, `// ЛЕНТА с храповиком: длина ${n(c.strapLen)}, зуб ${n(c.toothPitch)}/${n(c.toothD)}`);
+    L.push(`translate([${n(W/2)}, ${n(-c.strapW/2)}, ${n(zTop)}]) rotate([90,0,0])`);
+    L.push(`  rotate([0,0,0]) translate([0,0,${n(-c.strapW)}]) linear_extrude(${n(c.strapW)}) polygon([`);
+    L.push(strapPoly(c.strapLen, c.strapT, c.toothPitch, c.toothD)
+           .map(([x, z]) => `    [${n(x)}, ${n(z)}]`).join(",\n"));
+    L.push(`  ]);`);
   } else if (TOPPED(c.model)) {
     const zTop = -c.baseT;                       // низ площадки
     L.push(`// ШТОК`);
@@ -466,5 +560,6 @@ function toScad(c) {
 if (typeof module !== "undefined")
   module.exports = { MODELS, ABOUT, RULES, DEFAULTS, derive, checks, toScad, r2,
                      buildProfile, stemProfile, buildPinProfile, buildSleeveProfile, boredProfile,
-                     screwCoreProfile, cSeatPoly, TWO_HEAD, RECT_HEAD, THREADED, SADDLE, PLATE, TOPPED };
+                     screwCoreProfile, cSeatPoly, edgePoly, strapPoly,
+                     TWO_HEAD, RECT_HEAD, THREADED, SADDLE, PLATE, TOPPED, PUSH_TIE, EDGE };
 /*__ENDNODE__*/
